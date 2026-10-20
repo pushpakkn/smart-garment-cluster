@@ -27,7 +27,8 @@ CUSTOM_CSS = """
 .metric-value {font-size:1.8rem;font-weight:750;color:#12344d;}
 .section-note {color:#617487;font-size:.92rem;}
 div[data-testid="stMetric"] {background:#fff;border:1px solid #e2e8f0;padding:15px 16px;border-radius:14px;box-shadow:0 3px 12px rgba(15,40,60,.04);}
-div[data-testid="stMetricLabel"] {color:#53687b;}
+div[data-testid="stMetricLabel"] {color:#526477;}
+div[data-testid="stMetricValue"] {color: #12344d;}
 .stButton button[kind="primary"] {background:#147d79;border-color:#147d79;}
 </style>
 """
