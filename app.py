@@ -17,7 +17,7 @@ CUSTOM_CSS = """
 <style>
 /* Main page background */
 .stApp {
-    background: linear-gradient(135deg, #edf5f4 0%, #e7eff5 100%);
+    background: linear-gradient(135deg, #20645b 0%, #e7eff5 100%);
 }
 
 /* Main content spacing */
