@@ -72,7 +72,7 @@ div[data-testid="stMetricLabel"],
 div[data-testid="stMetricLabel"] *,
 div[data-testid="stMetricLabel"] p,
 div[data-testid="stMetricLabel"] label {
-    color: #263E50 !important;
+    color: #020629 !important;
     opacity: 1 !important;
     font-weight: 600 !important;
 }/* Metric labels */
