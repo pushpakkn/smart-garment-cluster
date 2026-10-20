@@ -13,48 +13,137 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
 CUSTOM_CSS = """
 <style>
-.block-container {padding-top: 1.5rem; padding-bottom: 2rem; max-width: 1400px;}
+/* Main page background */
+.stApp {
+    background: linear-gradient(135deg, #edf5f4 0%, #e7eff5 100%);
+}
+
+/* Main content spacing */
+.block-container {
+    padding-top: 1.5rem;
+    padding-bottom: 2rem;
+    max-width: 1400px;
+}
+
+/* Sidebar */
 [data-testid="stSidebar"] {
     background: linear-gradient(180deg, #102a43 0%, #163e5c 100%);
-    min-width: 250px;
 }
-[data-testid="stSidebar"] * { color: #f4f8fb !important; }
-[data-testid="stSidebarContent"] { padding-left: 1rem; padding-right: 1rem; }
-.hero {padding: 1.35rem 1.5rem; border-radius: 18px; background: linear-gradient(115deg,#12344d,#147d79); color: white; margin-bottom: 1.1rem;}
-.hero h1 {font-size: 2rem; margin: 0 0 .35rem 0; color: white;}
-.hero p {margin: 0; color: #e2f4f3; font-size: 1rem;}
-.metric-card {border: 1px solid #e2e8f0; border-radius: 15px; padding: 1rem 1.1rem; background: white; box-shadow: 0 3px 12px rgba(15,40,60,.05);}
-.metric-label {font-size:.88rem;color:#526477;margin-bottom:.3rem;}
-.metric-value {font-size:1.8rem;font-weight:750;color:#12344d;}
-.section-note {color:#617487;font-size:.92rem;}
+
+[data-testid="stSidebar"] * {
+    color: #f4f8fb !important;
+}
+
+/* Header banner */
+.hero {
+    padding: 1.35rem 1.5rem;
+    border-radius: 18px;
+    background: linear-gradient(115deg, #12344d, #147d79);
+    color: #ffffff;
+    margin-bottom: 1.1rem;
+    box-shadow: 0 5px 18px rgba(18, 52, 77, 0.12);
+}
+
+.hero h1 {
+    font-size: 2rem;
+    margin: 0 0 .35rem 0;
+    color: #ffffff;
+}
+
+.hero p {
+    margin: 0;
+    color: #e2f4f3;
+    font-size: 1rem;
+}
+
+/* Dashboard metric cards */
 div[data-testid="stMetric"] {
-    background: #ffffff !important;
-    color: #12344d !important;
-    border: 1px solid #dce5ed;
-    padding: 16px;
-    border-radius: 14px;
-    box-shadow: 0 3px 12px rgba(15,40,60,.04);
+    background: #e0efed !important;
+    border: 1px solid #b8d8d4;
+    padding: 18px;
+    border-radius: 16px;
+    box-shadow: 0 4px 14px rgba(18, 52, 77, 0.07);
 }
+
+/* Metric labels */
 div[data-testid="stMetricLabel"],
-div[data-testid="stMetricLabel"] *,
-div[data-testid="stMetricLabel"] p,
-div[data-testid="stMetricLabel"] label {
-    color: #526477 !important;
+div[data-testid="stMetricLabel"] * {
+    color: #40596b !important;
     opacity: 1 !important;
 }
+
+/* Metric numbers */
 div[data-testid="stMetricValue"],
 div[data-testid="stMetricValue"] * {
     color: #12344d !important;
     opacity: 1 !important;
+    font-weight: 750 !important;
 }
-div[data-testid="stMetricDelta"],
-div[data-testid="stMetricDelta"] * {
-    opacity: 1 !important;
+
+/* Supporting text */
+.metric-card {
+    background: #e0efed;
+    border: 1px solid #b8d8d4;
+    border-radius: 15px;
+    padding: 1rem 1.1rem;
+    box-shadow: 0 3px 12px rgba(15, 40, 60, .05);
 }
-.stButton button[kind="primary"] {background:#147d79;border-color:#147d79;}
+
+.metric-label {
+    font-size: .88rem;
+    color: #40596b;
+    margin-bottom: .3rem;
+}
+
+.metric-value {
+    font-size: 1.8rem;
+    font-weight: 750;
+    color: #12344d;
+}
+
+.section-note {
+    color: #526477;
+    font-size: .92rem;
+}
+
+/* Buttons */
+.stButton button[kind="primary"],
+.stFormSubmitButton button[kind="primary"] {
+    background: #147d79;
+    border-color: #147d79;
+    color: #ffffff;
+    border-radius: 10px;
+}
+
+.stButton button[kind="primary"]:hover,
+.stFormSubmitButton button[kind="primary"]:hover {
+    background: #10645f;
+    border-color: #10645f;
+    color: #ffffff;
+}
+
+/* Tables and data containers */
+div[data-testid="stDataFrame"],
+div[data-testid="stTable"] {
+    border: 1px solid #d4e2e8;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+/* Input fields */
+.stTextInput input,
+.stNumberInput input,
+.stDateInput input,
+.stSelectbox div[data-baseweb="select"] {
+    border-radius: 9px;
+}
+
+/* Headings */
+h1, h2, h3, h4 {
+    color: #12344d;
+}
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
