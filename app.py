@@ -17,8 +17,12 @@ st.set_page_config(
 CUSTOM_CSS = """
 <style>
 .block-container {padding-top: 1.5rem; padding-bottom: 2rem; max-width: 1400px;}
-[data-testid="stSidebar"] {background: linear-gradient(180deg,#102a43 0%,#163e5c 100%);}
-[data-testid="stSidebar"] * {color: #f4f8fb !important;}
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #102a43 0%, #163e5c 100%);
+    min-width: 250px;
+}
+[data-testid="stSidebar"] * { color: #f4f8fb !important; }
+[data-testid="stSidebarContent"] { padding-left: 1rem; padding-right: 1rem; }
 .hero {padding: 1.35rem 1.5rem; border-radius: 18px; background: linear-gradient(115deg,#12344d,#147d79); color: white; margin-bottom: 1.1rem;}
 .hero h1 {font-size: 2rem; margin: 0 0 .35rem 0; color: white;}
 .hero p {margin: 0; color: #e2f4f3; font-size: 1rem;}
@@ -26,12 +30,28 @@ CUSTOM_CSS = """
 .metric-label {font-size:.88rem;color:#526477;margin-bottom:.3rem;}
 .metric-value {font-size:1.8rem;font-weight:750;color:#12344d;}
 .section-note {color:#617487;font-size:.92rem;}
-div[data-testid="stMetric"] {background:#fff;border:1px solid #e2e8f0;padding:15px 16px;border-radius:14px;box-shadow:0 3px 12px rgba(15,40,60,.04);}
-div[data-testid="stMetricLabel"] {color:#526477;}
+div[data-testid="stMetric"] {
+    background: #ffffff !important;
+    color: #12344d !important;
+    border: 1px solid #dce5ed;
+    padding: 16px;
+    border-radius: 14px;
+    box-shadow: 0 3px 12px rgba(15,40,60,.04);
+}
 div[data-testid="stMetricLabel"],
+div[data-testid="stMetricLabel"] *,
 div[data-testid="stMetricLabel"] p,
 div[data-testid="stMetricLabel"] label {
     color: #526477 !important;
+    opacity: 1 !important;
+}
+div[data-testid="stMetricValue"],
+div[data-testid="stMetricValue"] * {
+    color: #12344d !important;
+    opacity: 1 !important;
+}
+div[data-testid="stMetricDelta"],
+div[data-testid="stMetricDelta"] * {
     opacity: 1 !important;
 }
 .stButton button[kind="primary"] {background:#147d79;border-color:#147d79;}
@@ -134,11 +154,11 @@ if page == "Dashboard":
             status_counts = orders["status"].value_counts().reindex(["Pending","In Progress","Completed"], fill_value=0)
             chart_data = status_counts.rename_axis("Order Status").reset_index(name="Orders")
             st.bar_chart(
-            chart_data,
-            x="Order Status",
-            y="Orders",
-            color="#147d79",
-            height=300,
+                chart_data,
+                x="Order Status",
+                y="Orders",
+                color="#147d79",
+                height=300,
             )
         else:
             st.info("No production orders yet.")
