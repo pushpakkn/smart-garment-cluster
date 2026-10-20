@@ -155,6 +155,16 @@ div[data-testid="stTable"] {
 h1, h2, h3, h4 {
     color: #12344d;
 }
+/* Force metric labels to use a dark, readable color */
+[data-testid="stMetricLabel"],
+[data-testid="stMetricLabel"] p,
+[data-testid="stMetricLabel"] label,
+[data-testid="stMetricLabel"] span {
+    color: #1B3347 !important;
+    -webkit-text-fill-color: #1B3347 !important;
+    opacity: 1 !important;
+    font-weight: 600 !important;
+}
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
