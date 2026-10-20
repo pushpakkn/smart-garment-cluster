@@ -69,9 +69,20 @@ div[data-testid="stMetric"] {
 
 /* Metric labels */
 div[data-testid="stMetricLabel"],
-div[data-testid="stMetricLabel"] * {
-    color: #40596b !important;
+div[data-testid="stMetricLabel"] *,
+div[data-testid="stMetricLabel"] p,
+div[data-testid="stMetricLabel"] label {
+    color: #263E50 !important;
     opacity: 1 !important;
+    font-weight: 600 !important;
+}/* Metric labels */
+div[data-testid="stMetricLabel"],
+div[data-testid="stMetricLabel"] *,
+div[data-testid="stMetricLabel"] p,
+div[data-testid="stMetricLabel"] label {
+    color: #263E50 !important;
+    opacity: 1 !important;
+    font-weight: 600 !important;
 }
 
 /* Metric numbers */
