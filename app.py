@@ -165,6 +165,38 @@ h1, h2, h3, h4 {
     opacity: 1 !important;
     font-weight: 600 !important;
 }
+/* Inventory tabs: replace red accents with teal */
+.stApp [data-baseweb="tab-list"] button {
+    color: #D8E7EA !important;
+    border-bottom-color: transparent !important;
+}
+
+.stApp [data-baseweb="tab-list"] button p,
+.stApp [data-baseweb="tab-list"] button span {
+    color: #D8E7EA !important;
+}
+
+/* Active tab */
+.stApp [data-baseweb="tab-list"] button[aria-selected="true"] {
+    color: #FFFFFF !important;
+    border-bottom: 2px solid #36C2B4 !important;
+}
+
+.stApp [data-baseweb="tab-list"] button[aria-selected="true"] p,
+.stApp [data-baseweb="tab-list"] button[aria-selected="true"] span {
+    color: #FFFFFF !important;
+}
+
+/* Remove red hover effects */
+.stApp [data-baseweb="tab-list"] button:hover {
+    color: #FFFFFF !important;
+    background-color: rgba(54, 194, 180, 0.12) !important;
+}
+
+.stApp [data-baseweb="tab-list"] button:hover p,
+.stApp [data-baseweb="tab-list"] button:hover span {
+    color: #FFFFFF !important;
+}
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
