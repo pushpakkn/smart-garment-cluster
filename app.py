@@ -28,7 +28,12 @@ CUSTOM_CSS = """
 .section-note {color:#617487;font-size:.92rem;}
 div[data-testid="stMetric"] {background:#fff;border:1px solid #e2e8f0;padding:15px 16px;border-radius:14px;box-shadow:0 3px 12px rgba(15,40,60,.04);}
 div[data-testid="stMetricLabel"] {color:#526477;}
-div[data-testid="stMetricValue"] {color: #12344d;}
+div[data-testid="stMetricLabel"],
+div[data-testid="stMetricLabel"] p,
+div[data-testid="stMetricLabel"] label {
+    color: #526477 !important;
+    opacity: 1 !important;
+}
 .stButton button[kind="primary"] {background:#147d79;border-color:#147d79;}
 </style>
 """
@@ -127,7 +132,14 @@ if page == "Dashboard":
         st.markdown("#### Order status")
         if not orders.empty:
             status_counts = orders["status"].value_counts().reindex(["Pending","In Progress","Completed"], fill_value=0)
-            st.bar_chart(status_counts, color="#147d79")
+            chart_data = status_counts.rename_axis("Order Status").reset_index(name="Orders")
+            st.bar_chart(
+            chart_data,
+            x="Order Status",
+            y="Orders",
+            color="#147d79",
+            height=300,
+            )
         else:
             st.info("No production orders yet.")
     with right:
