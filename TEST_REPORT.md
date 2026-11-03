@@ -1,18 +1,28 @@
-# Phase 1 verification report
+# Phase 1 + Demonstration Data Verification Report
 
 ## Automated checks
-- Python AST parse and bytecode compilation: PASS.
-- Smoke test of 11 navigation pages using a Streamlit API stub: PASS.
-- Buyer and Artisan registration: PASS.
-- Password hashing (PBKDF2-HMAC-SHA256 with per-user salt): PASS.
-- Valid login and invalid-password rejection: PASS.
-- SQLite migration adds `users`, `owner_user_id`, inquiry ownership/order references and order ownership references: PASS.
-- Existing listings retained during migration: PASS.
-- Public listing pages execute in guest mode: PASS.
-- Account-only chat, inquiry and management pages execute in guest mode without exceptions: PASS.
+- Python syntax compilation: PASS.
+- Existing Phase 1 navigation and account flows retained in source.
+- Demo Buyer and two Demo Artisan accounts are seeded idempotently.
+- Demo accounts use salted PBKDF2-HMAC-SHA256 password hashes.
+- Buyer-to-artisan sample conversations are seeded without overwriting existing user messages.
+- Sample listings are attached to demo artisan owners so chat and inquiry actions can be demonstrated.
+- Additional fictional materials, products and production orders populate the management workspace.
+- Seed logic checks unique usernames, listing titles, product names and order codes before inserting records.
 
-## Pages tested
-Artisan Marketplace, Raw Materials Marketplace, Chat Box, Buyer Inquiries, My Profile, My Listings, Dashboard, Inventory, Production Orders, Product Catalogue, About Project.
+## Demo scenarios
+1. Use **Buyer demo** in the sidebar and open Chat Box to show existing conversations with two artisans.
+2. Send a new message and sign out.
+3. Use **Artisan demo** to open Chat Box and show the buyer's message in the corresponding conversation.
+4. Open Artisan Marketplace and Raw Materials Marketplace as a guest to demonstrate public listing visibility.
+5. Sign in as Artisan and open My Listings to edit, pause or delete listings owned by that demo account.
+6. Open Dashboard, Inventory, Production Orders and Product Catalogue to demonstrate populated management records.
+7. As Buyer, open a demo-owned listing, start a chat or submit an inquiry; as Artisan, review it in Buyer Inquiries.
 
-## Limitation
-Streamlit is not installed in this execution environment, so browser-level visual/integration testing was not possible. Tests used a lightweight Streamlit API stub plus real SQLite databases. Please verify the final hosted deployment after commit.
+## Demo credentials
+- Buyer: `buyer` / `demo1234`
+- Artisan: `artisan` / `demo1234`
+- Second Artisan: `artisan2` / `demo1234`
+
+## Limitations
+Streamlit browser-level visual testing must still be performed after deployment. Chat is stored in SQLite and refreshes on page rerun; it is not a real-time push messaging service. Demo records are fictional. Do not use the demo credentials in a public production deployment.

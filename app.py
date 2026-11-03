@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 DB = Path(__file__).parent / "garment_cluster.db"
-st.set_page_config(page_title="Garment Cluster Marketplace", page_icon="🧵", layout="wide")
+st.set_page_config(page_title="Artisan Integrated Network & Commerce", page_icon="🧵", layout="wide")
 
 st.markdown("""
 <style>
@@ -274,22 +274,100 @@ with db() as conn:
                          (image_path.read_bytes(), title))
     conn.commit()
 
-# Seed fictional back-and-forth messages once for a populated classroom demonstration.
+# Seed repeatable classroom demo accounts, listings and chat conversations.
+# These accounts contain fictional data and are intended only for demonstrations.
+demo_accounts = [
+    ("buyer", "buyer.demo@artisync.example", "Buyer", "Aarav Mehta", "Nagpur", "", "Demo buyer account for testing enquiries and chats."),
+    ("artisan", "artisan.demo@artisync.example", "Artisan", "Meera Kulkarni", "Nagpur", "Madhubani & textile art", "Demo artisan account showcasing artwork listings."),
+    ("artisan2", "artisan2.demo@artisync.example", "Artisan", "Riya Sharma", "Nagpur", "Embroidery & handcrafted work", "Second demo artisan for multi-contact conversations."),
+]
 with db() as conn:
-    if conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 0:
-        demo_pairs = [
-            ("Demo Fabric Supplier","Pushpak","Fabric sample request","Hello! We have cotton fabric swatches in natural, white and indigo. Would you like to see the options?",None,"2026-11-02T10:15"),
-            ("Pushpak","Demo Fabric Supplier","Re: Fabric sample request","Yes, please. I am particularly interested in indigo and natural cotton. What is the minimum order quantity?",None,"2026-11-02T10:22"),
-            ("Demo Fabric Supplier","Pushpak","Re: Fabric sample request","The minimum order is 10 metres. We can keep a sample ready for collection in Nagpur.",None,"2026-11-02T10:31"),
-            ("Pushpak","Studio Rangrekha","Artwork customisation","Can the Madhubani-inspired motif colours be adjusted to match a festive kurta collection?",None,"2026-11-02T11:05"),
-            ("Studio Rangrekha","Pushpak","Re: Artwork customisation","Absolutely. We can prepare a customised colour palette and a placement preview for the front panel.",None,"2026-11-02T11:18"),
-            ("Sakhi Embroidery Unit","Pushpak","Mirror-work samples","We can prepare a sample set of mirror-work patches. Do you prefer a floral or geometric pattern?",None,"2026-11-02T12:02"),
-            ("Pushpak","Sakhi Embroidery Unit","Re: Mirror-work samples","A floral pattern would be great. Please share the sample price and expected preparation time.",None,"2026-11-02T12:16"),
-            ("Demo Garment Unit","Pushpak","Small batch collaboration","We are interested in collaborating on a small batch of printed cotton shirts. Can you share the artwork details?",None,"2026-11-02T13:40"),
-            ("Pushpak","Demo Garment Unit","Re: Small batch collaboration","I can share a few design options. Let's begin with a small sample batch and review the print quality.",None,"2026-11-02T13:52")
-        ]
-        conn.executemany("INSERT INTO messages(sender,recipient,subject,body,listing_id,sent_at,read_status) VALUES(?,?,?,?,?,?,0)",demo_pairs)
-        conn.commit()
+    for username,email,role,full_name,location,craft,bio in demo_accounts:
+        if not conn.execute("SELECT 1 FROM users WHERE username=?", (username,)).fetchone():
+            salt=secrets.token_hex(16)
+            conn.execute(
+                "INSERT INTO users(username,email,password_hash,salt,role,full_name,location,craft,bio,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (username,email,password_hash("demo1234",salt),salt,role,full_name,location,craft,bio,datetime.now().isoformat(timespec="seconds"))
+            )
+    demo_user_ids={r["username"]:r["id"] for r in conn.execute(
+        "SELECT id,username FROM users WHERE username IN ('buyer','artisan','artisan2')"
+    ).fetchall()}
+    # Attach existing public sample listings to demo artisan accounts so chat and inquiries work.
+    conn.execute("UPDATE listings SET owner_user_id=? WHERE seller IN ('Studio Rangrekha','Adivasi Art Collective','PrintCraft Studio') AND owner_user_id IS NULL",
+                 (demo_user_ids["artisan"],))
+    conn.execute("UPDATE listings SET owner_user_id=? WHERE seller='Sakhi Embroidery Unit' AND owner_user_id IS NULL",
+                 (demo_user_ids["artisan2"],))
+    # Additional public sample listings to make both marketplaces feel populated.
+    extra_listings = [
+        ("Festive Peacock Motif","Artwork","Decorative peacock composition for festive apparel and dupatta panels.",890,6,"designs","Meera Kulkarni","Nagpur","Available","artisan"),
+        ("Geometric Warli Border","Artwork","Repeatable border design for stoles, cushion covers and apparel.",520,15,"designs","Meera Kulkarni","Nagpur","Available","artisan"),
+        ("Hand Embroidered Floral Patches","Embroidery","Small-batch floral patches for jackets, bags and accessories.",85,60,"pcs","Riya Sharma","Nagpur","Available","artisan2"),
+        ("Decorative Thread Tassels","Handcrafted Accessories","Hand-finished tassels for dupattas, bags and home décor.",35,80,"pcs","Riya Sharma","Nagpur","Available","artisan2"),
+        ("Indigo Cotton Fabric","Fabric","Pre-cut indigo cotton fabric suitable for sampling and small production runs.",210,75,"metres","Demo Fabric Supply","Nagpur","Available",None),
+        ("Embroidery Thread Set","Thread","Assorted colour thread set for hand embroidery work.",160,24,"sets","Demo Thread Supply","Nagpur","Available",None),
+        ("Metal Button Assortment","Accessories","Assorted decorative buttons for sample garment production.",4,300,"pcs","Demo Trim Supply","Nagpur","Available",None),
+    ]
+    for title,category,description,price,quantity,unit,seller,location,status,owner in extra_listings:
+        if not conn.execute("SELECT 1 FROM listings WHERE title=?", (title,)).fetchone():
+            owner_id=demo_user_ids.get(owner) if owner else None
+            conn.execute("""INSERT INTO listings(title,category,description,price,quantity,unit,seller,location,status,created_at,owner_user_id)
+                            VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                         (title,category,description,price,quantity,unit,seller,location,status,date.today().isoformat(),owner_id))
+    # Link legacy demo artwork records to the artisan account for functional chat/inquiry buttons.
+    conn.execute("UPDATE listings SET owner_user_id=? WHERE seller='Studio Rangrekha' AND owner_user_id IS NULL",
+                 (demo_user_ids["artisan"],))
+    # Populate management tables without duplicating records on later reruns.
+    materials = [
+        ("Silk Blend Fabric","Fabric",42,"metres",20,"Demo Textile Supplier"),
+        ("Embroidery Thread","Thread",9,"spools",12,"Demo Thread Supplier"),
+        ("Decorative Buttons","Accessories",180,"pcs",50,"Demo Trim Supplier"),
+        ("Packaging Pouches","Packaging",65,"pcs",25,"Demo Packaging Supplier"),
+        ("Lining Material","Fabric",28,"metres",15,"Demo Textile Supplier"),
+    ]
+    for name,category,qty,unit,minimum,supplier in materials:
+        if not conn.execute("SELECT 1 FROM materials WHERE name=?", (name,)).fetchone():
+            conn.execute("INSERT INTO materials(name,category,quantity,unit,min_stock,supplier,updated_at) VALUES(?,?,?,?,?,?,?)",
+                         (name,category,qty,unit,minimum,supplier,date.today().isoformat()))
+    products = [
+        ("Indigo Printed Kurta","Ethnic Wear",1499,"Demo catalogue item with block-print detailing."),
+        ("Handcrafted Tote Bag","Accessories",799,"Demo artisan-made cotton tote bag."),
+        ("Embroidered Cushion Cover","Gift Items",599,"Demo cushion cover with hand embroidery."),
+        ("Printed Cotton Stole","Accessories",449,"Demo lightweight printed stole."),
+        ("Kids Festive Set","Gift Items",999,"Demo festive clothing set."),
+        ("Classic Cotton Shirt - Blue","Shirts",849,"Demo cotton shirt in indigo blue."),
+    ]
+    for name,category,price,description in products:
+        if not conn.execute("SELECT 1 FROM products WHERE name=?", (name,)).fetchone():
+            conn.execute("INSERT INTO products(name,category,price,description,created_at) VALUES(?,?,?,?,?)",
+                         (name,category,price,description,date.today().isoformat()))
+    orders = [
+        ("ORD-DEMO-1002","Festive Kurta",18,"Pending","Awaiting material confirmation."),
+        ("ORD-DEMO-1003","Printed Cotton Stole",35,"In Progress","Printing completed; finishing underway."),
+        ("ORD-DEMO-1004","Handcrafted Tote Bag",20,"Completed","Ready for quality check."),
+        ("ORD-DEMO-1005","Indigo Printed Kurta",12,"In Progress","Stitching in progress."),
+        ("ORD-DEMO-1006","Embroidered Cushion Cover",24,"Pending","Scheduled for next production slot."),
+        ("ORD-DEMO-1007","Kids Festive Set",10,"Completed","Demo order completed."),
+    ]
+    for code,product,qty,status,notes in orders:
+        if not conn.execute("SELECT 1 FROM orders WHERE order_code=?", (code,)).fetchone():
+            conn.execute("INSERT INTO orders(order_code,product_name,quantity,due_date,status,notes,created_at) VALUES(?,?,?,?,?,?,?)",
+                         (code,product,qty,date.today().isoformat(),status,notes,date.today().isoformat()))
+    # Seed buyer-to-artisan chats. Existing user conversations are never overwritten.
+    chat_examples = [
+        ("buyer","artisan","Madhubani artwork enquiry","Hello Meera, can the peacock motif be customised to use teal and gold colours?"),
+        ("artisan","buyer","Madhubani artwork enquiry","Yes! I can prepare a colour variation. The usual turnaround for a custom design is 3–4 days."),
+        ("buyer","artisan","Madhubani artwork enquiry","That works. Could you also share a preview before confirming the quantity?"),
+        ("artisan","buyer","Madhubani artwork enquiry","Of course. I will share a digital preview first."),
+        ("buyer","artisan2","Embroidery sample request","Hi Riya, are the floral patches available in a set of 20?"),
+        ("artisan2","buyer","Embroidery sample request","Hello! Yes, I can prepare a set of 20. Would you prefer pastel or bright colours?"),
+        ("buyer","artisan2","Embroidery sample request","Pastel colours would be ideal. Please share the estimated price."),
+    ]
+    for sender,recipient,subject,body in chat_examples:
+        if not conn.execute("SELECT 1 FROM messages WHERE sender=? AND recipient=? AND body=?",
+                            (sender,recipient,body)).fetchone():
+            conn.execute("INSERT INTO messages(sender,recipient,subject,body,listing_id,sent_at,read_status) VALUES(?,?,?,?,NULL,?,0)",
+                         (sender,recipient,subject,body,datetime.now().isoformat(timespec="minutes")))
+    conn.commit()
 
 def hero(t,s): st.markdown(f'<div class="hero"><h1>{t}</h1><p>{s}</p></div>',unsafe_allow_html=True)
 def _select_market_nav():
@@ -299,7 +377,7 @@ def _select_operations_nav():
 
 signed_in=get_user()
 with st.sidebar:
-    st.markdown("## 🧵 Garment Marketplace")
+    st.markdown("## Artisan Integrated Network & Commerce")
     st.caption("A digital workspace for artisans and garment businesses")
     if signed_in:
         st.markdown(f"**{signed_in['full_name']}**")
@@ -343,6 +421,23 @@ with st.sidebar:
                         ok,msg=register_user(username,email,pw,role,full_name,location,craft,bio)
                         (st.success if ok else st.error)(msg)
 
+        st.markdown("**Quick demo access**")
+        demo_left,demo_right=st.columns(2)
+        if demo_left.button("Buyer demo",use_container_width=True):
+            demo_uid=q("SELECT id FROM users WHERE username='buyer'")
+            if not demo_uid.empty:
+                st.session_state["auth_user_id"]=int(demo_uid.iloc[0]["id"])
+                st.session_state["active_page"]="Chat Box"
+                st.session_state["market_nav"]="Chat Box"
+                st.rerun()
+        if demo_right.button("Artisan demo",use_container_width=True):
+            demo_uid=q("SELECT id FROM users WHERE username='artisan'")
+            if not demo_uid.empty:
+                st.session_state["auth_user_id"]=int(demo_uid.iloc[0]["id"])
+                st.session_state["active_page"]="Chat Box"
+                st.session_state["market_nav"]="Chat Box"
+                st.rerun()
+        st.caption("Demo password for manual sign-in: demo1234")
     st.markdown('<div class="nav-kicker">Marketplace</div>',unsafe_allow_html=True)
     market_options=["Artisan Marketplace","Raw Materials Marketplace"]
     if signed_in: market_options += ["Chat Box","Buyer Inquiries","My Profile"]
@@ -484,6 +579,8 @@ elif page=="Chat Box":
     if not signed_in:
         st.info("Sign in to chat. All public marketplace listings remain visible without an account.")
     else:
+        if signed_in["username"] in ("buyer","artisan","artisan2"):
+            st.info("Demo mode: conversations are preloaded with fictional sample messages. Send a message to demonstrate two-way chat; switch between Buyer demo and Artisan demo from the sidebar after signing out.")
         contacts=q("SELECT id,username,full_name,role FROM users WHERE id<>? ORDER BY full_name",(int(signed_in["id"]),))
         if contacts.empty:
             st.info("No other registered users yet. Create a second account to test buyer–artisan conversations.")
@@ -603,7 +700,7 @@ elif page=="My Listings":
                     st.rerun()
 
 elif page=="Dashboard":
-    hero("Marketplace & Cluster Overview","A combined view of inventory, production and marketplace activity.")
+    hero("Management Overview","A combined view of inventory, production, catalogue and marketplace activity.")
     m=q("SELECT * FROM materials"); p=q("SELECT * FROM products"); o=q("SELECT * FROM orders"); l=q("SELECT * FROM listings"); i=q("SELECT * FROM inquiries"); ms=q("SELECT * FROM messages")
     low=m[m.quantity<=m.min_stock] if not m.empty else m
     a,b,c,d,e=st.columns(5); a.metric("Materials",len(m)); b.metric("Catalogue products",len(p)); c.metric("Open orders",int(o.status.isin(["Pending","In Progress"]).sum()) if not o.empty else 0); d.metric("Available listings",int((l.status=="Available").sum()) if not l.empty else 0); e.metric("Buyer inquiries",len(i))
