@@ -1,23 +1,22 @@
-# Artisan & Garment Cluster Marketplace
+# Garment Cluster Marketplace — Phase 1
 
-Student demonstration prototype built with Python, Streamlit, SQLite and Pandas.
+A student prototype built with Python, Streamlit, SQLite and Pandas.
 
-## Marketplace structure
-- **Artisan Marketplace** is the main creative marketplace. It contains only artisan work: original artwork, embroidery, handcrafted accessories, print designs and textile art.
-- **Raw Materials Marketplace** is separate and contains fabric, thread, trims, packaging and garment-making supplies.
-- Both marketplaces include a publish form with image upload (PNG/JPG/JPEG), description, price, quantity, seller and location.
-- Sample artisan artwork thumbnails are included in `artwork_samples/`. Listings can also display images uploaded by the user.
+## Implemented in Phase 1
+- **Authentication:** account registration and sign-in for Buyer and Artisan roles. Passwords are stored as salted PBKDF2-HMAC-SHA256 hashes.
+- **Role-aware access:** Buyers browse, send inquiries and view their orders. Artisans manage their profile, publish/manage listings, review inquiries and manage production.
+- **Artisan profiles:** studio name, location, craft specialisation, biography and public business contact.
+- **Listing ownership:** new listings are tied to the authenticated artisan. Artisans can edit, pause/unpause or remove only their own listings. Removed listings are soft-removed to preserve order history.
+- **Inquiry-to-order workflow:** buyer inquiries are tied to buyer and seller accounts. Artisans can respond, accept or reject. Accepted inquiries can be converted into confirmed orders. Buyers can view their orders.
 
-## Run
+## Run locally
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
 ## GitHub / Streamlit deployment
-Upload `app.py`, `requirements.txt`, `README.md`, the `.streamlit/config.toml` file, and the `artwork_samples` folder to the repository root. GitHub web upload may require uploading the image files individually or using GitHub Desktop.
+Upload `app.py`, `requirements.txt`, `README.md`, `TEST_REPORT.md`, `.streamlit/config.toml`, and the complete `artwork_samples/` folder.
 
-## Demo communication
-The app seeds fictional sample messages once if the messages table is empty. Change the sidebar demo name to `Pushpak`, `Demo Fabric Supplier`, `Studio Rangrekha`, `Sakhi Embroidery Unit`, or `Demo Garment Unit` to view both sides of the sample conversation.
-
-All listings, people and messages are fictional. This is not official SFURTI software. Messages are stored in SQLite and are not live chat, email or SMS. No authentication, payment, shipping or verified identity is implemented.
+## Important limitations
+This is a college demonstration prototype, not a production commerce platform. It does not include email verification, password reset, MFA, rate limiting, account recovery, administrator moderation, payments, shipping, refunds or dispute resolution. SQLite and local image BLOB storage are acceptable for a small demo, but Streamlit Community Cloud local filesystem persistence is not guaranteed across restarts/rebuilds. Use managed PostgreSQL and object storage before relying on real multi-user data. Legacy demo listings may have no owner account; newly published listings are owner-linked.

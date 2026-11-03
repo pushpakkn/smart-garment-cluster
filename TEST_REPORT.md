@@ -1,19 +1,27 @@
-# Code verification report
+# Phase 1 code verification
 
-## Automated checks performed
-- Python compilation: passed.
-- Page smoke tests using a Streamlit API stub: all 9 navigation pages executed without exceptions.
-- SQLite initialization: passed.
-- Backward-compatible migration from a listings table without the image column: passed.
-- Existing listing preservation during migration: passed.
-- Demo seed data: 9 messages, 4 materials, 2 products, 1 production order.
-- Four sample artwork images attached to their demo listing records: passed.
-- Marketplace category separation (artisan work vs raw materials): passed.
-- Listing image BLOB storage: passed.
-- Removed bare conditional-expression statements that could render Streamlit DeltaGenerator objects as unintended output.
+## Automated checks completed
+- Python AST parse and bytecode compilation: passed.
+- Authenticated artisan app execution using a Streamlit widget stub: passed.
+- SQLite schema initialization: passed.
+- New `users` and `artisan_profiles` tables: verified.
+- Backward-compatible migrations for listing ownership, inquiry ownership and order workflow: verified.
+- Salted PBKDF2-HMAC-SHA256 password hashing and constant-time password comparison implemented.
+- New listing inserts include authenticated owner ID.
+- Listing edit and soft-remove SQL operations constrain by both listing ID and owner ID.
+- Inquiry records include buyer and seller account IDs.
+- Accepted inquiry conversion creates a linked order with buyer, seller and listing references.
+- Buyer order query is scoped to the authenticated buyer.
 
-## Pages smoke-tested
-Artisan Marketplace, Raw Materials Marketplace, Messages, Buyer Inquiries, Dashboard, Inventory, Production Orders, Product Catalogue, About Project.
+## Manual tests still required on deployed Streamlit
+1. Register an Artisan account and a Buyer account.
+2. Sign in/out with both accounts.
+3. Confirm Buyer cannot publish, edit or remove artisan listings.
+4. Confirm Artisan A cannot edit/remove Artisan B's listings.
+5. Submit a buyer inquiry and confirm it appears only for the listing's artisan and the buyer.
+6. Accept the inquiry as the artisan and create the order.
+7. Confirm the buyer sees the resulting order in My Orders.
+8. Confirm records survive a Streamlit restart; if not, configure a managed persistent database.
 
-## Important limitation
-Streamlit itself was not installed in the test execution environment, so a real browser/server integration test could not be run here. The smoke tests use a lightweight stub for Streamlit widgets and contexts. Please verify the deployed app after Streamlit Community Cloud rebuilds it.
+## Known limitations
+This is prototype-grade authentication and authorization, not a production identity service. No email verification, password reset, MFA, rate limiting, account recovery or admin moderation. Streamlit Community Cloud's local filesystem is not guaranteed to persist; external database and object storage are recommended for a real multi-user deployment.
