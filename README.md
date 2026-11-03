@@ -28,5 +28,5 @@ Replace the files in the GitHub repository connected to Streamlit Community Clou
 Existing database records are retained. The app adds missing demonstration products and materials without duplicating matching names. This is a student prototype; chat refreshes on Streamlit reruns and SQLite persistence on hosted infrastructure is not guaranteed.
 
 
-## Accessibility and QA
-The latest build includes contrast-focused styling for text, inputs, menus, buttons, tables, metrics, tabs, chat and alerts. See `TEST_REPORT.md` for automated checks and representative WCAG contrast calculations. A deployed-browser visual check is still required.
+## Visual theme
+The interface uses a Facebook-inspired palette: Facebook blue (`#1877F2`), light grey canvas (`#F0F2F5`), white content cards, and dark text (`#1C1E21`). The existing page structure, navigation and workflows are retained.
