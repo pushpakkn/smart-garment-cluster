@@ -1,7 +1,5 @@
 import sqlite3
-import hashlib
-import hmac
-import secrets
+import hashlib, hmac, secrets, re
 from pathlib import Path
 from datetime import date, datetime
 import pandas as pd
@@ -177,18 +175,34 @@ def q(sql, p=()):
     with db() as c: return pd.read_sql_query(sql,c,params=p)
 def x(sql,p=()):
     with db() as c: c.execute(sql,p); c.commit()
-def password_digest(password, salt=None):
-    salt = salt or secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 240000)
-    return f"{salt}${digest.hex()}"
 
-def verify_password(password, stored):
+def password_hash(password,salt):
+    return hashlib.pbkdf2_hmac("sha256",password.encode(),salt.encode(),240000).hex()
+
+def get_user():
+    uid=st.session_state.get("auth_user_id")
+    if not uid: return None
+    rows=q("SELECT id,username,email,role,full_name,location,craft,bio FROM users WHERE id=?",(uid,))
+    return None if rows.empty else rows.iloc[0].to_dict()
+
+def register_user(username,email,password,role,full_name,location,craft,bio):
+    username,email=username.strip(),email.strip().lower()
+    if len(username)<3 or not re.fullmatch(r"[A-Za-z0-9_.-]+",username): return False,"Username must be at least 3 characters."
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+",email): return False,"Enter a valid email."
+    if len(password)<8: return False,"Password must contain at least 8 characters."
+    salt=secrets.token_hex(16)
     try:
-        salt, expected = stored.split("$", 1)
-        actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 240000).hex()
-        return hmac.compare_digest(actual, expected)
-    except (ValueError, AttributeError):
-        return False
+        x("INSERT INTO users(username,email,password_hash,salt,role,full_name,location,craft,bio,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+          (username,email,password_hash(password,salt),salt,role,full_name.strip(),location.strip(),craft.strip(),bio.strip(),datetime.now().isoformat(timespec="seconds")))
+        return True,"Account created. Sign in to continue."
+    except sqlite3.IntegrityError: return False,"Username or email already exists."
+
+def login_user(identifier,password):
+    rows=q("SELECT * FROM users WHERE lower(username)=lower(?) OR lower(email)=lower(?)",(identifier.strip(),identifier.strip()))
+    if rows.empty: return None
+    r=rows.iloc[0]
+    if hmac.compare_digest(password_hash(password,str(r.salt)),str(r.password_hash)): return int(r.id)
+    return None
 
 def init():
     with db() as c:
@@ -202,30 +216,15 @@ def init():
             c.execute("ALTER TABLE listings ADD COLUMN image BLOB")
         c.execute("""CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT,sender TEXT NOT NULL,recipient TEXT NOT NULL,subject TEXT NOT NULL,body TEXT NOT NULL,listing_id INTEGER,sent_at TEXT NOT NULL,read_status INTEGER NOT NULL DEFAULT 0)""")
         c.execute("""CREATE TABLE IF NOT EXISTS inquiries(id INTEGER PRIMARY KEY AUTOINCREMENT,listing_id INTEGER NOT NULL,buyer TEXT NOT NULL,quantity INTEGER NOT NULL,message TEXT DEFAULT '',status TEXT NOT NULL DEFAULT 'New',created_at TEXT NOT NULL)""")
-        c.execute("""CREATE TABLE IF NOT EXISTS users(
-            id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL,
-            email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
-            role TEXT NOT NULL CHECK(role IN ('Buyer','Artisan')),
-            created_at TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1)""")
-        c.execute("""CREATE TABLE IF NOT EXISTS artisan_profiles(
-            user_id INTEGER PRIMARY KEY, display_name TEXT NOT NULL,
-            location TEXT DEFAULT '', craft_specialisation TEXT DEFAULT '',
-            bio TEXT DEFAULT '', contact TEXT DEFAULT '',
-            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)""")
-        # Backward-compatible ownership/workflow columns.
-        migrations = {
-            "listings": [("owner_user_id", "INTEGER")],
-            "inquiries": [("buyer_user_id", "INTEGER"), ("seller_user_id", "INTEGER"),
-                          ("accepted_at", "TEXT")],
-            "orders": [("inquiry_id", "INTEGER"), ("buyer_user_id", "INTEGER"),
-                       ("seller_user_id", "INTEGER"), ("listing_id", "INTEGER"),
-                       ("order_status", "TEXT DEFAULT 'Pending confirmation'")]
-        }
-        for table, additions in migrations.items():
-            existing_cols = [r[1] for r in c.execute(f"PRAGMA table_info({table})").fetchall()]
-            for col, definition in additions:
-                if col not in existing_cols:
-                    c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {definition}")
+        c.execute("""CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT,username TEXT UNIQUE NOT NULL,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,salt TEXT NOT NULL,role TEXT NOT NULL,full_name TEXT NOT NULL,location TEXT DEFAULT '',craft TEXT DEFAULT '',bio TEXT DEFAULT '',created_at TEXT NOT NULL)""")
+        listing_cols=[r[1] for r in c.execute("PRAGMA table_info(listings)").fetchall()]
+        if "owner_user_id" not in listing_cols: c.execute("ALTER TABLE listings ADD COLUMN owner_user_id INTEGER")
+        inquiry_cols=[r[1] for r in c.execute("PRAGMA table_info(inquiries)").fetchall()]
+        for col,definition in [("buyer_user_id","INTEGER"),("artisan_user_id","INTEGER"),("order_id","INTEGER")]:
+            if col not in inquiry_cols: c.execute(f"ALTER TABLE inquiries ADD COLUMN {col} {definition}")
+        order_cols=[r[1] for r in c.execute("PRAGMA table_info(orders)").fetchall()]
+        for col,definition in [("listing_id","INTEGER"),("buyer_user_id","INTEGER"),("artisan_user_id","INTEGER"),("inquiry_id","INTEGER")]:
+            if col not in order_cols: c.execute(f"ALTER TABLE orders ADD COLUMN {col} {definition}")
         today=date.today().isoformat()
         if c.execute("SELECT COUNT(*) FROM materials").fetchone()[0]==0:
             c.executemany("INSERT INTO materials(name,category,quantity,unit,min_stock,supplier,updated_at) VALUES(?,?,?,?,?,?,?)",[
@@ -294,182 +293,143 @@ with db() as conn:
 
 def hero(t,s): st.markdown(f'<div class="hero"><h1>{t}</h1><p>{s}</p></div>',unsafe_allow_html=True)
 def _select_market_nav():
-    st.session_state["active_page"] = st.session_state["market_nav"]
-
+    st.session_state["active_page"]=st.session_state["market_nav"]
 def _select_operations_nav():
-    st.session_state["active_page"] = st.session_state["operations_nav"]
+    st.session_state["active_page"]=st.session_state["operations_nav"]
 
-def current_user():
-    uid = st.session_state.get("auth_user_id")
-    if not uid:
-        return None
-    rows = q("SELECT id,username,email,role FROM users WHERE id=? AND is_active=1", (uid,))
-    return None if rows.empty else rows.iloc[0].to_dict()
-
-def auth_screen():
-    hero("Welcome to the Garment Cluster Marketplace", "Sign in or create an account to discover artisan work and manage your marketplace activity.")
-    login_tab, register_tab = st.tabs(["Sign in", "Create account"])
-    with login_tab:
-        with st.form("login_form"):
-            identity = st.text_input("Username or email")
-            password = st.text_input("Password", type="password")
-            submitted = st.form_submit_button("Sign in", type="primary")
-        if submitted:
-            rows = q("SELECT * FROM users WHERE lower(username)=lower(?) OR lower(email)=lower(?)", (identity.strip(), identity.strip()))
-            if not rows.empty and verify_password(password, rows.iloc[0]["password_hash"]) and int(rows.iloc[0]["is_active"]) == 1:
-                st.session_state["auth_user_id"] = int(rows.iloc[0]["id"])
-                st.session_state["active_page"] = "Artisan Marketplace"
-                st.rerun()
-            else:
-                st.error("Invalid credentials or inactive account.")
-    with register_tab:
-        with st.form("register_form", clear_on_submit=True):
-            username = st.text_input("Username")
-            email = st.text_input("Email")
-            display = st.text_input("Display / business name")
-            role = st.selectbox("Account type", ["Buyer", "Artisan"])
-            password1 = st.text_input("Password", type="password")
-            password2 = st.text_input("Confirm password", type="password")
-            location = st.text_input("Location", value="Nagpur")
-            craft = st.text_input("Craft specialisation", placeholder="e.g. Madhubani, embroidery, block printing")
-            bio = st.text_area("Short profile description")
-            registered = st.form_submit_button("Create account", type="primary")
-        if registered:
-            if not all([username.strip(), email.strip(), display.strip(), password1]):
-                st.error("Complete all required fields.")
-            elif "@" not in email or "." not in email.split("@")[-1]:
-                st.error("Enter a valid email address.")
-            elif len(password1) < 8:
-                st.error("Use a password with at least 8 characters.")
-            elif password1 != password2:
-                st.error("Passwords do not match.")
-            else:
-                try:
-                    with db() as conn:
-                        cur = conn.execute(
-                            "INSERT INTO users(username,email,password_hash,role,created_at) VALUES(?,?,?,?,?)",
-                            (username.strip(), email.strip().lower(), password_digest(password1), role, datetime.now().isoformat(timespec="seconds"))
-                        )
-                        uid = cur.lastrowid
-                        if role == "Artisan":
-                            conn.execute(
-                                "INSERT INTO artisan_profiles(user_id,display_name,location,craft_specialisation,bio) VALUES(?,?,?,?,?)",
-                                (uid, display.strip(), location.strip(), craft.strip(), bio.strip())
-                            )
-                        conn.commit()
-                    st.success("Account created. Sign in using your username or email.")
-                except sqlite3.IntegrityError:
-                    st.error("That username or email is already registered.")
-
+signed_in=get_user()
 with st.sidebar:
     st.markdown("## 🧵 Garment Marketplace")
-    st.caption("Cluster trade & communication workspace")
-    logged_in = current_user()
-    if logged_in:
-        st.markdown('<div class="sidebar-user-label">SIGNED IN AS</div>', unsafe_allow_html=True)
-        st.markdown(f"**{logged_in['username']}**")
-        st.caption(f"{logged_in['role']} account")
-        if st.button("Sign out", use_container_width=True):
-            for key in ["auth_user_id", "active_page", "market_nav", "operations_nav"]:
-                st.session_state.pop(key, None)
+    st.caption("A digital workspace for artisans and garment businesses")
+    if signed_in:
+        st.markdown(f"**{signed_in['full_name']}**")
+        st.caption(f"{signed_in['role']} · {signed_in['location'] or 'Location not set'}")
+        if st.button("Sign out",use_container_width=True):
+            st.session_state.pop("auth_user_id",None)
+            st.session_state.pop("active_page",None)
             st.rerun()
-        if logged_in["role"] == "Artisan":
-            market_options = ["Artisan Marketplace", "Raw Materials Marketplace", "Messages", "Buyer Inquiries", "My Artisan Profile", "My Listings"]
-        else:
-            market_options = ["Artisan Marketplace", "Raw Materials Marketplace", "Messages", "Buyer Inquiries", "My Orders"]
-        st.markdown('<div class="nav-kicker">Marketplace & community</div>', unsafe_allow_html=True)
-        st.session_state.setdefault("market_nav", st.session_state.get("active_page", "Artisan Marketplace"))
-        st.radio("Marketplace navigation", market_options, key="market_nav", on_change=_select_market_nav,
-                 label_visibility="collapsed")
-        operations_options = ["Dashboard", "Inventory", "Production Orders", "Product Catalogue", "About Project"]
-        if logged_in["role"] == "Artisan":
-            st.markdown('<div class="nav-kicker">Cluster management</div>', unsafe_allow_html=True)
-            st.session_state.setdefault("operations_nav", st.session_state.get("active_page", "Dashboard"))
-            st.radio("Management navigation", operations_options, key="operations_nav", on_change=_select_operations_nav,
-                     label_visibility="collapsed")
-        page = st.session_state.get("active_page", "Artisan Marketplace")
     else:
-        st.caption("Sign in to access marketplace features.")
-        page = None
-    st.markdown('<div class="sidebar-foot">ACCOUNT-BASED DEMONSTRATION<br>Prototype • not a production identity service</div>', unsafe_allow_html=True)
+        st.markdown('<div class="nav-kicker">Guest access</div>',unsafe_allow_html=True)
+        st.caption("Browse all listings without an account.")
+        with st.expander("Sign in / Create account"):
+            login_tab,register_tab=st.tabs(["Sign in","Register"])
+            with login_tab:
+                with st.form("login_form"):
+                    login_id=st.text_input("Username or email")
+                    login_pw=st.text_input("Password",type="password")
+                    login_submit=st.form_submit_button("Sign in",type="primary")
+                if login_submit:
+                    uid=login_user(login_id,login_pw)
+                    if uid:
+                        st.session_state["auth_user_id"]=uid
+                        st.rerun()
+                    else: st.error("Incorrect username/email or password.")
+            with register_tab:
+                with st.form("register_form"):
+                    full_name=st.text_input("Full name")
+                    username=st.text_input("Username")
+                    email=st.text_input("Email")
+                    role=st.selectbox("Account type",["Buyer","Artisan"])
+                    location=st.text_input("Location",value="Nagpur")
+                    craft=st.text_input("Craft / specialisation",disabled=(role!="Artisan"))
+                    bio=st.text_area("Short profile description")
+                    pw=st.text_input("Password (8+ characters)",type="password")
+                    pw2=st.text_input("Confirm password",type="password")
+                    reg=st.form_submit_button("Create account",type="primary")
+                if reg:
+                    if not full_name.strip(): st.error("Enter your full name.")
+                    elif pw!=pw2: st.error("Passwords do not match.")
+                    else:
+                        ok,msg=register_user(username,email,pw,role,full_name,location,craft,bio)
+                        (st.success if ok else st.error)(msg)
 
-if not logged_in:
-    auth_screen()
-    st.stop()
+    st.markdown('<div class="nav-kicker">Marketplace</div>',unsafe_allow_html=True)
+    market_options=["Artisan Marketplace","Raw Materials Marketplace"]
+    if signed_in: market_options += ["Chat Box","Buyer Inquiries","My Profile"]
+    st.session_state.setdefault("market_nav","Artisan Marketplace")
+    if st.session_state["market_nav"] not in market_options: st.session_state["market_nav"]="Artisan Marketplace"
+    st.radio("Marketplace navigation",market_options,key="market_nav",on_change=_select_market_nav,
+             label_visibility="collapsed",
+             format_func=lambda x:{"Artisan Marketplace":"🎨  Artisan Marketplace","Raw Materials Marketplace":"🧵  Raw Materials",
+             "Chat Box":"💬  Chat Box","Buyer Inquiries":"🤝  Buyer Inquiries","My Profile":"👤  My Profile"}[x])
+    st.markdown('<div class="nav-kicker">Cluster management</div>',unsafe_allow_html=True)
+    ops=["Dashboard","Inventory","Production Orders","Product Catalogue","About Project"]
+    if signed_in and signed_in["role"]=="Artisan": ops.append("My Listings")
+    st.session_state.setdefault("operations_nav","Dashboard")
+    if st.session_state["operations_nav"] not in ops: st.session_state["operations_nav"]="Dashboard"
+    st.radio("Management navigation",ops,key="operations_nav",on_change=_select_operations_nav,
+             label_visibility="collapsed",
+             format_func=lambda x:{"Dashboard":"▦  Dashboard","Inventory":"📦  Inventory","Production Orders":"🧾  Production Orders",
+             "Product Catalogue":"🛍️  Product Catalogue","About Project":"ⓘ  About Project","My Listings":"🗂️  My Listings"}[x])
+    page=st.session_state.get("active_page","Artisan Marketplace")
+    if page not in market_options+ops: page="Artisan Marketplace"
+    st.markdown('<div class="sidebar-foot">PUBLIC LISTINGS · ACCOUNT REQUIRED TO PARTICIPATE</div>',unsafe_allow_html=True)
 
-user = logged_in["username"]
-user_id = int(logged_in["id"])
-user_role = logged_in["role"]
-
+user=signed_in["username"] if signed_in else "Guest"
 
 def render_marketplace(kind):
     artisan = kind == "artisan"
     if artisan:
-        if user_role != "Buyer" and user_role != "Artisan":
-            st.error("Please sign in with a valid account.")
-            return
         hero("Artisan & Artwork Marketplace","Discover original artwork, handcrafted details and designs created by local artisans.")
-        allowed = ["Artwork","Embroidery","Handcrafted Accessories","Print Designs","Textile Art"]
-        heading = "Browse artisan creations"
-        form_key = "artisan_listing"
-        categories = allowed
-        empty_msg = "No artisan creations found yet. Be the first to publish an artwork listing."
+        allowed=["Artwork","Embroidery","Handcrafted Accessories","Print Designs","Textile Art"]
+        heading="Browse artisan creations"
+        empty_msg="No artisan creations found yet."
     else:
         hero("Raw Materials Marketplace","A separate sourcing space for fabrics, threads, trims and garment-making supplies.")
-        allowed = ["Fabric","Thread","Accessories","Packaging","Other"]
-        heading = "Browse raw materials"
-        form_key = "raw_listing"
-        categories = allowed
-        empty_msg = "No raw-material listings found. Publish a supply offer to get started."
+        allowed=["Fabric","Thread","Accessories","Packaging","Other"]
+        heading="Browse raw materials"
+        empty_msg="No raw-material listings found."
+    existing=q("SELECT * FROM listings WHERE status='Available' ORDER BY id DESC")
+    filtered=existing[existing.category.isin(allowed)] if not existing.empty else existing
+    c1,c2,c3=st.columns(3)
+    c1.metric("Available offers",len(filtered))
+    c2.metric("Categories",filtered.category.nunique() if not filtered.empty else 0)
+    c3.metric("Creators / suppliers",filtered.seller.nunique() if not filtered.empty else 0)
 
-    existing = q("SELECT * FROM listings WHERE status='Available' ORDER BY id DESC")
-    filtered = existing[existing.category.isin(allowed)] if not existing.empty else existing
-    a,b,c=st.columns(3)
-    a.metric("Available offers",len(filtered))
-    b.metric("Categories",filtered.category.nunique() if not filtered.empty else 0)
-    c.metric("Artisans / suppliers",filtered.seller.nunique() if not filtered.empty else 0)
-
-    if user_role == "Artisan":
-      with st.expander("＋ Upload and publish a new listing",expanded=False):
-        st.write("Add a clear photo of the artwork or product. JPG, JPEG and PNG images are supported.")
-        with st.form(form_key,clear_on_submit=True):
-            col1,col2=st.columns(2)
-            title=col1.text_input("Title")
-            category=col2.selectbox("Category",categories)
-            description=st.text_area("Description",placeholder="Describe the technique, materials, size, customisation options or story behind the work.")
-            col1,col2,col3=st.columns(3)
-            price=col1.number_input("Price (₹)",min_value=0.0,value=250.0,step=10.0)
-            qty=col2.number_input("Available quantity",min_value=1,value=1)
-            unit=col3.selectbox("Unit",["piece","design","set","pcs","metres","kg","spools","rolls"])
-            col1,col2=st.columns(2)
-            seller=col1.text_input("Artisan / seller name",value=user, disabled=True)
-            location=col2.text_input("Location",value="Nagpur")
-            upload=st.file_uploader("Upload artwork / product image",type=["png","jpg","jpeg"],key=f"image_{kind}")
-            publish=st.form_submit_button("Publish listing",type="primary")
-        if publish:
-            if not title.strip() or not seller.strip():
-                st.error("Please enter a title and artisan / seller name.")
-            else:
-                image_bytes=upload.getvalue() if upload is not None else None
-                if user_role != "Artisan":
-                    st.error("Only artisan accounts can publish artisan listings.")
+    if not signed_in:
+        st.info("Guest browsing is enabled. Listings are public. Sign in as an Artisan to publish, or as a Buyer to chat and send inquiries.")
+    elif signed_in["role"]=="Buyer":
+        st.info("You are signed in as a Buyer. Browse listings and contact artisans.")
+    else:
+        with st.expander("＋ Upload and publish a new listing"):
+            st.write("Add a clear photo. JPG, JPEG and PNG images are supported.")
+            with st.form(f"publish_{kind}",clear_on_submit=True):
+                c1,c2=st.columns(2)
+                title=c1.text_input("Title")
+                category=c2.selectbox("Category",allowed)
+                description=st.text_area("Description")
+                c1,c2,c3=st.columns(3)
+                price=c1.number_input("Price (₹)",min_value=0.0,value=250.0,step=10.0)
+                qty=c2.number_input("Available quantity",min_value=1,value=1)
+                unit=c3.selectbox("Unit",["piece","design","set","pcs","metres","kg","spools","rolls"])
+                c1,c2=st.columns(2)
+                seller=c1.text_input("Artisan / seller name",value=signed_in["full_name"])
+                location=c2.text_input("Location",value=signed_in["location"] or "Nagpur")
+                upload=st.file_uploader("Upload image",type=["png","jpg","jpeg"],key=f"image_{kind}")
+                publish=st.form_submit_button("Publish listing",type="primary")
+            if publish:
+                if not title.strip():
+                    st.error("Enter a listing title.")
                 else:
-                    x("INSERT INTO listings(title,category,description,price,quantity,unit,seller,location,status,created_at,image,owner_user_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-                      (title.strip(),category,description.strip(),float(price),int(qty),unit,seller.strip(),location.strip(),"Available",date.today().isoformat(),image_bytes,user_id))
-                    st.success("Your listing has been published.")
+                    image_bytes=upload.getvalue() if upload else None
+                    x("""INSERT INTO listings(title,category,description,price,quantity,unit,seller,location,status,created_at,image,owner_user_id)
+                         VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                      (title.strip(),category,description.strip(),float(price),int(qty),unit,seller.strip(),location.strip(),
+                       "Available",date.today().isoformat(),image_bytes,int(signed_in["id"])))
+                    st.success("Listing published.")
                     st.rerun()
 
     st.markdown(f"### {heading}")
-    search=st.text_input("Search listings",placeholder="Search by title, description or artisan...")
-    catpick=st.selectbox("Category",["All"]+categories,key=f"category_{kind}")
+    search=st.text_input("Search listings",placeholder="Search by title, description or creator...")
+    cat=st.selectbox("Category",["All"]+allowed,key=f"category_{kind}")
     shown=filtered.copy()
     if search and not shown.empty:
         mask=(shown.title.str.contains(search,case=False,na=False) |
               shown.description.str.contains(search,case=False,na=False) |
               shown.seller.str.contains(search,case=False,na=False))
         shown=shown[mask]
-    if catpick!="All" and not shown.empty:
-        shown=shown[shown.category==catpick]
+    if cat!="All" and not shown.empty:
+        shown=shown[shown.category==cat]
     if shown.empty:
         st.info(empty_msg)
     for _,r in shown.iterrows():
@@ -482,206 +442,167 @@ def render_marketplace(kind):
                     st.markdown(f"""<div style="height:150px;border-radius:12px;background:linear-gradient(135deg,#e8f3f2,#dce8f1);display:flex;align-items:center;justify-content:center;font-size:48px">{"🎨" if artisan else "🧵"}</div>""",unsafe_allow_html=True)
             with details:
                 st.markdown(f"### {r.title}")
-                st.caption(f"{r.category}  ·  {r.seller}  ·  {r.location}")
+                st.caption(f"{r.category} · {r.seller} · {r.location}")
                 st.write(r.description)
                 st.markdown(f'<div class="listing-price">₹{r.price:,.2f} / {r.unit}</div>',unsafe_allow_html=True)
-                st.caption(f"Available quantity: {r.quantity} {r.unit}")
+                st.caption(f"Available: {r.quantity} {r.unit}")
             with actions:
-                if st.button("Message seller",key=f"msg_{kind}_{r.id}",type="primary"):
-                    st.session_state["recipient"]=r.seller
-                    st.session_state["subject"]=f"Enquiry about {r.title}"
-                    st.session_state["related_listing"]=int(r.id)
-                    st.session_state["page_jump"]="Messages"
-                    st.info("Open Messages in the sidebar to contact this seller.")
-                if user_role == "Buyer":
+                if signed_in and signed_in["role"]=="Buyer" and pd.notna(r.get("owner_user_id")):
+                    if st.button("Chat with artisan",key=f"chat_{kind}_{r.id}",type="primary"):
+                        st.session_state["chat_partner"]=int(r.owner_user_id)
+                        st.session_state["chat_listing_title"]=r.title
+                        st.session_state["active_page"]="Chat Box"
+                        st.session_state["market_nav"]="Chat Box"
+                        st.rerun()
+                elif not signed_in:
+                    st.caption("Sign in to contact")
+                if signed_in and signed_in["role"]=="Buyer":
                     if st.button("Send inquiry",key=f"inq_{kind}_{r.id}"):
                         st.session_state["inq_listing"]=int(r.id)
-                if user_role == "Buyer" and st.session_state.get("inq_listing")==int(r.id):
-                    with st.form(f"inq_form_{kind}_{r.id}"):
-                        iq=st.number_input("Quantity requested",min_value=1,max_value=max(1,int(r.quantity)),value=1)
-                        msg=st.text_area("Requirements or question")
-                        send=st.form_submit_button("Submit inquiry")
-                    if send:
-                        x("""INSERT INTO inquiries(listing_id,buyer,quantity,message,status,created_at,buyer_user_id,seller_user_id)
-                             VALUES(?,?,?,?,?,?,?,?)""",
-                          (int(r.id),user,int(iq),msg.strip(),"New",datetime.now().isoformat(timespec="minutes"),user_id,
-                           int(r.owner_user_id) if pd.notna(r.get("owner_user_id")) else None))
-                        st.session_state.pop("inq_listing",None)
-                        st.success("Inquiry saved.")
-                        st.rerun()
+            if st.session_state.get("inq_listing")==int(r.id) and signed_in and signed_in["role"]=="Buyer":
+                with st.form(f"inq_form_{kind}_{r.id}"):
+                    requested=st.number_input("Quantity requested",min_value=1,max_value=max(1,int(r.quantity)),value=1)
+                    note=st.text_area("Requirements or question")
+                    send=st.form_submit_button("Submit inquiry")
+                if send:
+                    x("""INSERT INTO inquiries(listing_id,buyer,quantity,message,status,created_at,buyer_user_id,artisan_user_id)
+                         VALUES(?,?,?,?,?,?,?,?)""",
+                      (int(r.id),signed_in["full_name"],int(requested),note.strip(),"New",
+                       datetime.now().isoformat(timespec="minutes"),int(signed_in["id"]),
+                       int(r.owner_user_id) if pd.notna(r.get("owner_user_id")) else None))
+                    st.session_state.pop("inq_listing",None)
+                    st.success("Inquiry submitted.")
+                    st.rerun()
 
 if page=="Artisan Marketplace":
     render_marketplace("artisan")
 elif page=="Raw Materials Marketplace":
     render_marketplace("raw")
 
-elif page=="My Artisan Profile":
-    if user_role != "Artisan":
-        st.error("This page is available to artisan accounts.")
+elif page=="Chat Box":
+    hero("Chat Box","Direct conversations between registered buyers and artisans.")
+    if not signed_in:
+        st.info("Sign in to chat. All public marketplace listings remain visible without an account.")
     else:
-        hero("My Artisan Profile", "Manage the public identity buyers see when discovering your work.")
-        profile = q("SELECT * FROM artisan_profiles WHERE user_id=?", (user_id,))
-        current = profile.iloc[0] if not profile.empty else None
-        with st.form("artisan_profile_form"):
-            display = st.text_input("Artisan / studio name", value=str(current.display_name) if current is not None else user)
-            location = st.text_input("Location", value=str(current.location) if current is not None else "Nagpur")
-            craft = st.text_input("Craft specialisation", value=str(current.craft_specialisation) if current is not None else "")
-            bio = st.text_area("About your work", value=str(current.bio) if current is not None else "")
-            contact = st.text_input("Public business contact", value=str(current.contact) if current is not None else "")
-            save_profile = st.form_submit_button("Save profile", type="primary")
-        if save_profile:
-            x("""INSERT INTO artisan_profiles(user_id,display_name,location,craft_specialisation,bio,contact)
-                 VALUES(?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET
-                 display_name=excluded.display_name,location=excluded.location,
-                 craft_specialisation=excluded.craft_specialisation,bio=excluded.bio,contact=excluded.contact""",
-              (user_id,display.strip(),location.strip(),craft.strip(),bio.strip(),contact.strip()))
-            st.success("Profile saved.")
+        contacts=q("SELECT id,username,full_name,role FROM users WHERE id<>? ORDER BY full_name",(int(signed_in["id"]),))
+        if contacts.empty:
+            st.info("No other registered users yet. Create a second account to test buyer–artisan conversations.")
+        else:
+            contact_ids=contacts.id.astype(int).tolist()
+            default_id=st.session_state.get("chat_partner")
+            if default_id not in contact_ids: default_id=contact_ids[0]
+            selected=st.selectbox("Conversation",contact_ids,index=contact_ids.index(default_id),
+                format_func=lambda uid: (contacts[contacts.id==uid].iloc[0]["full_name"]+
+                    " · "+contacts[contacts.id==uid].iloc[0]["role"]))
+            partner=contacts[contacts.id==selected].iloc[0]
+            st.markdown(f"### {partner.full_name}")
+            st.caption(f"{partner.role} · {st.session_state.get('chat_listing_title','Marketplace conversation')}")
+            history=q("""SELECT sender,recipient,body,sent_at FROM messages
+                WHERE (lower(sender)=lower(?) AND lower(recipient)=lower(?))
+                   OR (lower(sender)=lower(?) AND lower(recipient)=lower(?))
+                ORDER BY id""",(signed_in["username"],partner.username,partner.username,signed_in["username"]))
+            if history.empty: st.caption("No messages yet. Start the conversation below.")
+            for _,m in history.iterrows():
+                own=str(m.sender).lower()==signed_in["username"].lower()
+                with st.chat_message("user" if own else "assistant"):
+                    st.caption(("You" if own else partner.full_name)+" · "+str(m.sent_at))
+                    st.write(m.body)
+            with st.form("chat_compose",clear_on_submit=True):
+                message=st.text_area("Message",placeholder="Ask about customisation, pricing, availability or an order...")
+                send=st.form_submit_button("Send",type="primary")
+            if send:
+                if not message.strip(): st.error("Write a message first.")
+                else:
+                    x("INSERT INTO messages(sender,recipient,subject,body,listing_id,sent_at,read_status) VALUES(?,?,?,?,?,?,0)",
+                      (signed_in["username"],partner.username,"Chat",message.strip(),None,datetime.now().isoformat(timespec="minutes")))
+                    st.rerun()
+
+elif page=="Buyer Inquiries":
+    hero("Buyer Inquiries","Review requests and convert accepted inquiries into production orders.")
+    if not signed_in:
+        st.info("Sign in to view and manage inquiries.")
+    else:
+        if signed_in["role"]=="Artisan":
+            iq=q("""SELECT i.id,i.created_at,i.buyer,l.title AS listing,i.quantity,i.message,i.status,i.order_id,i.buyer_user_id
+                    FROM inquiries i JOIN listings l ON l.id=i.listing_id
+                    WHERE i.artisan_user_id=? ORDER BY i.id DESC""",(int(signed_in["id"]),))
+        else:
+            iq=q("""SELECT i.id,i.created_at,i.buyer,l.title AS listing,i.quantity,i.message,i.status,i.order_id,i.buyer_user_id
+                    FROM inquiries i JOIN listings l ON l.id=i.listing_id
+                    WHERE i.buyer_user_id=? ORDER BY i.id DESC""",(int(signed_in["id"]),))
+        if iq.empty:
+            st.info("No inquiries yet.")
+        else:
+            st.dataframe(iq.drop(columns=["order_id"]),use_container_width=True,hide_index=True)
+            options={f"#{r.id} · {r.listing} · {r.buyer}":int(r.id) for _,r in iq.iterrows()}
+            chosen=st.selectbox("Select inquiry",list(options))
+            row=iq[iq.id==options[chosen]].iloc[0]
+            st.write("**Buyer requirements:** "+str(row.message or "No additional message"))
+            if signed_in["role"]=="Artisan" and row.status=="New":
+                left,right=st.columns(2)
+                if left.button("Accept & create production order",type="primary"):
+                    code="ORD-"+datetime.now().strftime("%y%m%d%H%M%S")
+                    x("INSERT INTO orders(order_code,product_name,quantity,due_date,status,notes,created_at,listing_id,buyer_user_id,artisan_user_id,inquiry_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                      (code,str(row.listing),int(row.quantity),date.today().isoformat(),"Pending",str(row.message or ""),date.today().isoformat(),None,int(row.buyer_user_id) if pd.notna(row.buyer_user_id) else None,int(signed_in["id"]),int(row.id)))
+                    oid=int(q("SELECT id FROM orders WHERE order_code=?",(code,)).iloc[0]["id"])
+                    x("UPDATE inquiries SET status='Accepted',order_id=? WHERE id=?",(oid,int(row.id)))
+                    st.success("Accepted. A linked production order has been created.")
+                    st.rerun()
+                if right.button("Reject inquiry"):
+                    x("UPDATE inquiries SET status='Rejected' WHERE id=?",(int(row.id),))
+                    st.rerun()
+            elif row.status=="Accepted":
+                st.success("This inquiry has been converted into a production order.")
+            else:
+                st.info("Request status: "+str(row.status))
+
+
+elif page=="My Profile":
+    hero("My Profile","Manage your public artisan or buyer profile.")
+    if not signed_in:
+        st.info("Sign in to manage your profile.")
+    else:
+        with st.form("profile_update"):
+            full_name=st.text_input("Full name",value=signed_in["full_name"])
+            location=st.text_input("Location",value=signed_in["location"] or "")
+            craft=st.text_input("Craft / specialisation",value=signed_in["craft"] or "",disabled=signed_in["role"]!="Artisan")
+            bio=st.text_area("About you",value=signed_in["bio"] or "")
+            save=st.form_submit_button("Save profile",type="primary")
+        if save:
+            x("UPDATE users SET full_name=?,location=?,craft=?,bio=? WHERE id=?",
+              (full_name.strip(),location.strip(),craft.strip(),bio.strip(),int(signed_in["id"])))
+            st.success("Profile updated.")
             st.rerun()
 
 elif page=="My Listings":
-    if user_role != "Artisan":
-        st.error("This page is available to artisan accounts.")
+    hero("My Listings","Edit, pause or remove listings published by your artisan account.")
+    if not signed_in or signed_in["role"]!="Artisan":
+        st.info("An Artisan account is required.")
     else:
-        hero("My Listings", "Edit, pause or remove listings published by your account.")
-        mine = q("SELECT * FROM listings WHERE owner_user_id=? ORDER BY id DESC", (user_id,))
+        mine=q("SELECT * FROM listings WHERE owner_user_id=? ORDER BY id DESC",(int(signed_in["id"]),))
         if mine.empty:
-            st.info("You haven't published any listings yet.")
-        else:
-            for _, item in mine.iterrows():
-                with st.container(border=True):
-                    st.markdown(f"### {item.title}")
-                    st.caption(f"{item.category} · ₹{item.price:,.2f} / {item.unit} · {item.status}")
-                    with st.expander("Edit listing", expanded=False):
-                        with st.form(f"edit_listing_{int(item.id)}"):
-                            title_edit=st.text_input("Title",value=item.title)
-                            desc_edit=st.text_area("Description",value=item.description)
-                            price_edit=st.number_input("Price",min_value=0.0,value=float(item.price))
-                            qty_edit=st.number_input("Quantity",min_value=0,value=int(item.quantity))
-                            status_edit=st.selectbox("Availability",["Available","Unavailable"],index=0 if item.status=="Available" else 1)
-                            save_edit=st.form_submit_button("Save changes",type="primary")
-                        if save_edit:
-                            if not title_edit.strip():
-                                st.error("Listing title cannot be empty.")
-                            else:
-                                x("UPDATE listings SET title=?,description=?,price=?,quantity=?,status=? WHERE id=? AND owner_user_id=?",
-                                  (title_edit.strip(),desc_edit.strip(),float(price_edit),int(qty_edit),status_edit,int(item.id),user_id))
-                                st.success("Listing updated.")
-                                st.rerun()
-                    col1,col2=st.columns([1,4])
-                    with col1:
-                        if st.button("Remove listing",key=f"delete_listing_{int(item.id)}"):
-                            x("UPDATE listings SET status='Removed' WHERE id=? AND owner_user_id=?",(int(item.id),user_id))
-                            st.success("Listing removed from the marketplace.")
-                            st.rerun()
-
-elif page=="My Orders":
-    hero("My Orders", "Track order requests and confirmed work from artisans.")
-    my_orders=q("""SELECT o.*,l.title AS listing_title FROM orders o
-                   LEFT JOIN listings l ON l.id=o.listing_id
-                   WHERE o.buyer_user_id=? ORDER BY o.id DESC""",(user_id,))
-    if my_orders.empty:
-        st.info("You don't have any orders yet.")
-    else:
-        st.dataframe(my_orders[["order_code","listing_title","quantity","order_status","created_at"]].rename(
-            columns={"order_code":"Order","listing_title":"Artwork","quantity":"Qty","order_status":"Status","created_at":"Created"}),
-            use_container_width=True,hide_index=True)
-
-elif page=="Messages":
-    hero("Messages","Basic in-app text messaging between marketplace participants.")
-    st.warning("Prototype only: messages are saved in SQLite, not delivered by email/SMS or live push chat. Use demo names and do not enter sensitive information.")
-    ls=q("SELECT id,title FROM listings ORDER BY id DESC")
-    with st.form("send_message",clear_on_submit=True):
-        a,b=st.columns(2)
-        sender=a.text_input("From",value=user,disabled=True)
-        contacts=q("SELECT username FROM users WHERE id<>? AND is_active=1 ORDER BY username",(user_id,))
-        contact_names=contacts.username.tolist()
-        default_recipient=st.session_state.get("recipient","")
-        if default_recipient not in contact_names:
-            default_recipient=contact_names[0] if contact_names else ""
-        recipient=b.selectbox("To",contact_names,index=contact_names.index(default_recipient) if default_recipient in contact_names else 0) if contact_names else ""
-        if not contact_names:
-            st.info("No other registered accounts yet. Ask another participant to register first.")
-        subject=st.text_input("Subject",value=st.session_state.get("subject","")); body=st.text_area("Message")
-        opts=["None"]+[f"{r.id} — {r.title}" for _,r in ls.iterrows()]
-        related=st.selectbox("Related listing",opts)
-        send=st.form_submit_button("Send message",type="primary")
-    if send:
-        if not sender.strip() or not recipient.strip() or not subject.strip() or not body.strip(): st.error("Complete all message fields.")
-        elif sender.strip().casefold()==recipient.strip().casefold(): st.error("Recipient must be different from sender.")
-        else:
-            lid=int(related.split(" — ",1)[0]) if related!="None" else st.session_state.get("related_listing")
-            x("INSERT INTO messages(sender,recipient,subject,body,listing_id,sent_at,read_status) VALUES(?,?,?,?,?,?,0)",(sender.strip(),recipient.strip(),subject.strip(),body.strip(),lid,datetime.now().isoformat(timespec="minutes")))
-            st.success("Message saved."); st.session_state.pop("recipient",None); st.session_state.pop("subject",None); st.session_state.pop("related_listing",None); st.rerun()
-    st.markdown("### Inbox")
-    inbox=q("SELECT * FROM messages WHERE lower(recipient)=lower(?) ORDER BY id DESC",(user,))
-    if inbox.empty: st.info(f"No messages addressed to {user}. For a demo, send a message to this name from another participant name.")
-    for _,m in inbox.iterrows():
-        with st.container(border=True):
-            st.markdown(f"**{m.subject}**"); st.caption(f"From {m.sender} • {m.sent_at}"); st.write(m.body)
-            if not m.read_status and st.button("Mark read",key=f"read_{m.id}"): x("UPDATE messages SET read_status=1 WHERE id=?",(int(m.id),)); st.rerun()
-    st.markdown("### Sent messages")
-    sent=q("SELECT sent_at,recipient,subject,body FROM messages WHERE lower(sender)=lower(?) ORDER BY id DESC",(user,))
-    if not sent.empty:
-        st.dataframe(sent, use_container_width=True, hide_index=True)
-    else:
-        st.caption("No sent messages yet.")
-
-elif page=="Buyer Inquiries":
-    if user_role == "Artisan":
-        hero("Buyer Inquiries", "Review requests sent to your artisan listings and convert accepted requests into orders.")
-        iq=q("""SELECT i.id,i.created_at,i.buyer,l.title AS listing,i.quantity,i.message,i.status,l.seller,
-                       i.buyer_user_id,i.seller_user_id,l.id AS listing_id,l.price,l.unit
-                FROM inquiries i JOIN listings l ON l.id=i.listing_id
-                WHERE i.seller_user_id=? ORDER BY i.id DESC""",(user_id,))
-    else:
-        hero("My Inquiries", "Track the requests you have sent to artisans.")
-        iq=q("""SELECT i.id,i.created_at,i.buyer,l.title AS listing,i.quantity,i.message,i.status,l.seller,
-                       i.buyer_user_id,i.seller_user_id,l.id AS listing_id,l.price,l.unit
-                FROM inquiries i JOIN listings l ON l.id=i.listing_id
-                WHERE i.buyer_user_id=? ORDER BY i.id DESC""",(user_id,))
-    if iq.empty:
-        st.info("No inquiries found yet.")
-    else:
-        st.dataframe(iq[["id","created_at","buyer","listing","quantity","message","status"]].rename(
-            columns={"id":"Inquiry","created_at":"Date","buyer":"Buyer","listing":"Artwork","quantity":"Qty","message":"Message","status":"Status"}),
-            use_container_width=True,hide_index=True)
-        choices={f"#{r.id} — {r.listing} — {r.buyer}":int(r.id) for _,r in iq.iterrows()}
-        pick=st.selectbox("Choose inquiry",list(choices.keys()))
-        rec=iq[iq.id==choices[pick]].iloc[0]
-        if user_role=="Artisan":
-            with st.form(f"update_iq_{int(rec.id)}"):
-                status=st.selectbox("Request status",["New","Responded","In discussion","Accepted","Rejected","Closed"],
-                                    index=["New","Responded","In discussion","Accepted","Rejected","Closed"].index(rec.status)
-                                    if rec.status in ["New","Responded","In discussion","Accepted","Rejected","Closed"] else 0)
-                save=st.form_submit_button("Update inquiry",type="primary")
-            if save:
-                x("UPDATE inquiries SET status=? WHERE id=? AND seller_user_id=?",(status,int(rec.id),user_id))
-                st.rerun()
-            if rec.status=="Accepted":
-                already=q("SELECT id FROM orders WHERE inquiry_id=?",(int(rec.id),))
-                if already.empty:
-                    with st.form(f"convert_order_{int(rec.id)}"):
-                        due=st.date_input("Expected completion date",value=date.today())
-                        notes=st.text_area("Order notes")
-                        create=st.form_submit_button("Create confirmed order",type="primary")
-                    if create:
-                        code=f"ART-{datetime.now().strftime('%y%m%d')}-{int(rec.id):04d}"
-                        x("""INSERT INTO orders(order_code,product_name,quantity,due_date,status,notes,created_at,
-                             inquiry_id,buyer_user_id,seller_user_id,listing_id,order_status)
-                             VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
-                          (code,str(rec.listing),int(rec.quantity),due.isoformat(),"Pending",notes.strip(),
-                           datetime.now().isoformat(timespec="seconds"),int(rec.id),int(rec.buyer_user_id),
-                           user_id,int(rec.listing_id),"Confirmed"))
-                        st.success("Inquiry converted into an order.")
+            st.info("You have not published any listings yet.")
+        for _,r in mine.iterrows():
+            with st.container(border=True):
+                st.markdown(f"### {r.title}")
+                st.caption(f"{r.category} · {r.status} · ₹{r.price:,.2f}")
+                with st.expander("Edit listing"):
+                    with st.form(f"edit_listing_{r.id}"):
+                        title=st.text_input("Title",value=r.title)
+                        description=st.text_area("Description",value=r.description or "")
+                        price=st.number_input("Price",min_value=0.0,value=float(r.price))
+                        quantity=st.number_input("Quantity",min_value=0,value=int(r.quantity))
+                        status=st.selectbox("Status",["Available","Unavailable"],index=0 if r.status=="Available" else 1)
+                        save=st.form_submit_button("Save changes",type="primary")
+                    if save:
+                        x("UPDATE listings SET title=?,description=?,price=?,quantity=?,status=? WHERE id=? AND owner_user_id=?",
+                          (title.strip(),description.strip(),float(price),int(quantity),status,int(r.id),int(signed_in["id"])))
                         st.rerun()
-                else:
-                    st.success("An order has already been created for this inquiry.")
-        else:
-            st.caption("The artisan controls the inquiry response. Once accepted, the order will appear in My Orders.")
+                if st.button("Delete listing",key=f"delete_{r.id}"):
+                    x("DELETE FROM listings WHERE id=? AND owner_user_id=?",(int(r.id),int(signed_in["id"])))
+                    st.rerun()
+
 elif page=="Dashboard":
-    if user_role != "Artisan":
-        st.error("Cluster management is available to artisan accounts.")
-        st.stop()
     hero("Marketplace & Cluster Overview","A combined view of inventory, production and marketplace activity.")
     m=q("SELECT * FROM materials"); p=q("SELECT * FROM products"); o=q("SELECT * FROM orders"); l=q("SELECT * FROM listings"); i=q("SELECT * FROM inquiries"); ms=q("SELECT * FROM messages")
     low=m[m.quantity<=m.min_stock] if not m.empty else m
@@ -703,54 +624,51 @@ elif page=="Dashboard":
     st.caption(f"Messages stored: {len(ms)} • Inquiries: {len(i)}. Counts are from this app database.")
 
 elif page=="Inventory":
-    if user_role != "Artisan":
-        st.error("Inventory management is available to artisan accounts.")
-        st.stop()
     hero("Inventory Management","Maintain material quantities and low-stock thresholds.")
-    df=q("SELECT * FROM materials ORDER BY name")
-    st.dataframe(df,use_container_width=True,hide_index=True)
-    with st.expander("Add material"):
-        with st.form("add_material"):
-            a,b=st.columns(2); name=a.text_input("Name"); cat=b.selectbox("Category",["Fabric","Thread","Accessories","Packaging","Other"])
-            a,b,c=st.columns(3); qty=a.number_input("Quantity",min_value=0); unit=b.selectbox("Unit",["pcs","metres","kg","spools","rolls","sets"]); minimum=c.number_input("Minimum stock",min_value=0,value=5)
-            supplier=st.text_input("Supplier"); submit=st.form_submit_button("Add",type="primary")
-        if submit:
-            if not name.strip(): st.error("Enter a material name.")
-            else: x("INSERT INTO materials(name,category,quantity,unit,min_stock,supplier,updated_at) VALUES(?,?,?,?,?,?,?)",(name.strip(),cat,int(qty),unit,int(minimum),supplier.strip(),date.today().isoformat())); st.success("Added."); st.rerun()
-
+    if not signed_in:
+        st.info("Sign in to access inventory management.")
+    else:
+        df=q("SELECT * FROM materials ORDER BY name")
+        st.dataframe(df,use_container_width=True,hide_index=True)
+        with st.expander("Add material"):
+            with st.form("add_material"):
+                a,b=st.columns(2); name=a.text_input("Name"); cat=b.selectbox("Category",["Fabric","Thread","Accessories","Packaging","Other"])
+                a,b,c=st.columns(3); qty=a.number_input("Quantity",min_value=0); unit=b.selectbox("Unit",["pcs","metres","kg","spools","rolls","sets"]); minimum=c.number_input("Minimum stock",min_value=0,value=5)
+                supplier=st.text_input("Supplier"); submit=st.form_submit_button("Add",type="primary")
+            if submit:
+                if not name.strip(): st.error("Enter a material name.")
+                else: x("INSERT INTO materials(name,category,quantity,unit,min_stock,supplier,updated_at) VALUES(?,?,?,?,?,?,?)",(name.strip(),cat,int(qty),unit,int(minimum),supplier.strip(),date.today().isoformat())); st.success("Added."); st.rerun()
 elif page=="Production Orders":
-    if user_role != "Artisan":
-        st.error("Production management is available to artisan accounts.")
-        st.stop()
-    hero("Production Orders","Review and update production order status.")
-    df=q("SELECT * FROM orders WHERE seller_user_id=? OR seller_user_id IS NULL ORDER BY id DESC",(user_id,))
-    st.dataframe(df,use_container_width=True,hide_index=True)
-    if not df.empty:
-        labels={f"{r.order_code} — {r.product_name}":int(r.id) for _,r in df.iterrows()}; pick=st.selectbox("Select order",list(labels)); r=df[df.id==labels[pick]].iloc[0]
-        with st.form("edit_order"):
-            status=st.selectbox("Status",["Pending","In Progress","Completed"],index=["Pending","In Progress","Completed"].index(r.status)); due=st.date_input("Due date",value=date.fromisoformat(r.due_date)); notes=st.text_input("Notes",value=str(r.notes or "")); save=st.form_submit_button("Save",type="primary")
-        if save: x("UPDATE orders SET status=?,due_date=?,notes=? WHERE id=?",(status,due.isoformat(),notes,int(r.id))); st.rerun()
-    with st.expander("Create production order"):
-        prods=q("SELECT name FROM products"); names=prods.name.tolist() if not prods.empty else []
-        with st.form("new_order"):
-            code=st.text_input("Order ID",value=f"ORD-{1001+len(df)}"); product=st.selectbox("Product",names) if names else st.text_input("Product name"); qty=st.number_input("Quantity",min_value=1,value=10); due=st.date_input("Due date",value=date.today()); status=st.selectbox("Initial status",["Pending","In Progress","Completed"]); notes=st.text_input("Notes"); submit=st.form_submit_button("Create",type="primary")
-        if submit:
-            if not code.strip() or not product: st.error("Enter order ID and product.")
-            else: x("INSERT INTO orders(order_code,product_name,quantity,due_date,status,notes,created_at) VALUES(?,?,?,?,?,?,?)",(code.strip(),product,int(qty),due.isoformat(),status,notes.strip(),date.today().isoformat())); st.success("Created."); st.rerun()
-
+    if not signed_in:
+        st.info("Sign in to access this section.")
+    else:
+        hero("Production Orders","Review and update production order status.")
+        df=q("SELECT * FROM orders ORDER BY id DESC")
+        st.dataframe(df,use_container_width=True,hide_index=True)
+        if not df.empty:
+            labels={f"{r.order_code} — {r.product_name}":int(r.id) for _,r in df.iterrows()}; pick=st.selectbox("Select order",list(labels)); r=df[df.id==labels[pick]].iloc[0]
+            with st.form("edit_order"):
+                status=st.selectbox("Status",["Pending","In Progress","Completed"],index=["Pending","In Progress","Completed"].index(r.status)); due=st.date_input("Due date",value=date.fromisoformat(r.due_date)); notes=st.text_input("Notes",value=str(r.notes or "")); save=st.form_submit_button("Save",type="primary")
+            if save: x("UPDATE orders SET status=?,due_date=?,notes=? WHERE id=?",(status,due.isoformat(),notes,int(r.id))); st.rerun()
+        with st.expander("Create production order"):
+            prods=q("SELECT name FROM products"); names=prods.name.tolist() if not prods.empty else []
+            with st.form("new_order"):
+                code=st.text_input("Order ID",value=f"ORD-{1001+len(df)}"); product=st.selectbox("Product",names) if names else st.text_input("Product name"); qty=st.number_input("Quantity",min_value=1,value=10); due=st.date_input("Due date",value=date.today()); status=st.selectbox("Initial status",["Pending","In Progress","Completed"]); notes=st.text_input("Notes"); submit=st.form_submit_button("Create",type="primary")
+            if submit:
+                if not code.strip() or not product: st.error("Enter order ID and product.")
+                else: x("INSERT INTO orders(order_code,product_name,quantity,due_date,status,notes,created_at) VALUES(?,?,?,?,?,?,?)",(code.strip(),product,int(qty),due.isoformat(),status,notes.strip(),date.today().isoformat())); st.success("Created."); st.rerun()
 elif page=="Product Catalogue":
-    if user_role != "Artisan":
-        st.error("The product catalogue is available to artisan accounts.")
-        st.stop()
-    hero("Product Catalogue","Maintain the simple product catalogue.")
-    df=q("SELECT * FROM products ORDER BY name"); st.dataframe(df,use_container_width=True,hide_index=True)
-    with st.expander("Add product"):
-        with st.form("new_product"):
-            name=st.text_input("Product name"); cat=st.selectbox("Category",["Shirts","Ethnic Wear","Accessories","Gift Items","Other"]); price=st.number_input("Price (₹)",min_value=0.0); desc=st.text_area("Description"); submit=st.form_submit_button("Add",type="primary")
-        if submit:
-            if not name.strip(): st.error("Enter product name.")
-            else: x("INSERT INTO products(name,category,price,description,created_at) VALUES(?,?,?,?,?)",(name.strip(),cat,float(price),desc.strip(),date.today().isoformat())); st.success("Added."); st.rerun()
-
+    if not signed_in:
+        st.info("Sign in to access this section.")
+    else:
+        hero("Product Catalogue","Maintain the simple product catalogue.")
+        df=q("SELECT * FROM products ORDER BY name"); st.dataframe(df,use_container_width=True,hide_index=True)
+        with st.expander("Add product"):
+            with st.form("new_product"):
+                name=st.text_input("Product name"); cat=st.selectbox("Category",["Shirts","Ethnic Wear","Accessories","Gift Items","Other"]); price=st.number_input("Price (₹)",min_value=0.0); desc=st.text_area("Description"); submit=st.form_submit_button("Add",type="primary")
+            if submit:
+                if not name.strip(): st.error("Enter product name.")
+                else: x("INSERT INTO products(name,category,price,description,created_at) VALUES(?,?,?,?,?)",(name.strip(),cat,float(price),desc.strip(),date.today().isoformat())); st.success("Added."); st.rerun()
 else:
     hero("About Project","A student prototype inspired by the Nagpur Readymade Garment Cluster case-study context.")
     st.markdown("""
@@ -758,9 +676,9 @@ else:
 
     **Raw Materials Marketplace:** a separate space for fabrics, threads, trims, packaging and other garment-making supplies.
 
-    **Communication:** submit buyer inquiries and use basic in-app text messages stored in SQLite.
+    **Communication:** registered buyers and artisans can chat directly; buyers can submit inquiries and artisans can convert accepted requests into production orders.
 
     **Technology:** Python, Streamlit, SQLite and Pandas.
 
-    **Scope note:** this is not official SFURTI software. Seed data is fictional. There is no login/verified identity, real-time chat, email/SMS delivery, payments, shipping, dispute resolution, or guaranteed persistent cloud storage. Use demo names and never enter sensitive information.
+    **Scope note:** this is not official SFURTI software. Seed data is fictional. Accounts use salted PBKDF2 password hashes. Email verification, password reset, payments, shipping, dispute resolution and guaranteed persistent cloud storage are outside this prototype's scope. Chat is stored in SQLite and does not provide push notifications. Use demo names and never enter sensitive information.
     """)

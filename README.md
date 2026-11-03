@@ -1,13 +1,15 @@
-# Garment Cluster Marketplace — Phase 1
+# Garment Cluster Artisan Marketplace — Phase 1
 
-A student prototype built with Python, Streamlit, SQLite and Pandas.
+Python + Streamlit + SQLite prototype.
 
-## Implemented in Phase 1
-- **Authentication:** account registration and sign-in for Buyer and Artisan roles. Passwords are stored as salted PBKDF2-HMAC-SHA256 hashes.
-- **Role-aware access:** Buyers browse, send inquiries and view their orders. Artisans manage their profile, publish/manage listings, review inquiries and manage production.
-- **Artisan profiles:** studio name, location, craft specialisation, biography and public business contact.
-- **Listing ownership:** new listings are tied to the authenticated artisan. Artisans can edit, pause/unpause or remove only their own listings. Removed listings are soft-removed to preserve order history.
-- **Inquiry-to-order workflow:** buyer inquiries are tied to buyer and seller accounts. Artisans can respond, accept or reject. Accepted inquiries can be converted into confirmed orders. Buyers can view their orders.
+## Main behaviour
+- Public browsing: Artisan Marketplace and Raw Materials Marketplace listings are visible without signing in.
+- Registration/login: create Buyer or Artisan accounts. Passwords are stored as salted PBKDF2-HMAC-SHA256 hashes, not plaintext.
+- Buyer: browse public listings, start a chat with registered artisans, and submit inquiries.
+- Artisan: maintain profile, publish image listings, edit/pause/delete owned listings, review inquiries and accept/reject them.
+- Inquiry-to-order: accepting a buyer inquiry creates a linked production order.
+- Chat Box: account-based direct conversations replace the old Messages navigation item.
+- Raw materials remain in their own marketplace section.
 
 ## Run locally
 ```bash
@@ -15,8 +17,11 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## GitHub / Streamlit deployment
-Upload `app.py`, `requirements.txt`, `README.md`, `TEST_REPORT.md`, `.streamlit/config.toml`, and the complete `artwork_samples/` folder.
+## Deploy
+Upload all project files and folders to the GitHub repository connected to Streamlit Community Cloud.
 
-## Important limitations
-This is a college demonstration prototype, not a production commerce platform. It does not include email verification, password reset, MFA, rate limiting, account recovery, administrator moderation, payments, shipping, refunds or dispute resolution. SQLite and local image BLOB storage are acceptable for a small demo, but Streamlit Community Cloud local filesystem persistence is not guaranteed across restarts/rebuilds. Use managed PostgreSQL and object storage before relying on real multi-user data. Legacy demo listings may have no owner account; newly published listings are owner-linked.
+## Database
+The app automatically adds the new columns and users table to an older SQLite database without deleting existing listings. For real multi-user production use, move SQLite to a managed PostgreSQL database and use persistent image/object storage.
+
+## Limitations
+This is a student prototype. It does not yet include email verification, password reset, external identity provider, payment processing, shipping, real-time push notifications, or guaranteed persistence of the local SQLite file on hosted infrastructure. Chat is stored in SQLite and refreshes when the page reruns. Existing pre-account demo listings remain public but do not have an account owner, so account-based chat/inquiry actions are only available for listings published by a registered artisan.

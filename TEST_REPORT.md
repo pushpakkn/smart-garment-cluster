@@ -1,27 +1,18 @@
-# Phase 1 code verification
+# Phase 1 verification report
 
-## Automated checks completed
-- Python AST parse and bytecode compilation: passed.
-- Authenticated artisan app execution using a Streamlit widget stub: passed.
-- SQLite schema initialization: passed.
-- New `users` and `artisan_profiles` tables: verified.
-- Backward-compatible migrations for listing ownership, inquiry ownership and order workflow: verified.
-- Salted PBKDF2-HMAC-SHA256 password hashing and constant-time password comparison implemented.
-- New listing inserts include authenticated owner ID.
-- Listing edit and soft-remove SQL operations constrain by both listing ID and owner ID.
-- Inquiry records include buyer and seller account IDs.
-- Accepted inquiry conversion creates a linked order with buyer, seller and listing references.
-- Buyer order query is scoped to the authenticated buyer.
+## Automated checks
+- Python AST parse and bytecode compilation: PASS.
+- Smoke test of 11 navigation pages using a Streamlit API stub: PASS.
+- Buyer and Artisan registration: PASS.
+- Password hashing (PBKDF2-HMAC-SHA256 with per-user salt): PASS.
+- Valid login and invalid-password rejection: PASS.
+- SQLite migration adds `users`, `owner_user_id`, inquiry ownership/order references and order ownership references: PASS.
+- Existing listings retained during migration: PASS.
+- Public listing pages execute in guest mode: PASS.
+- Account-only chat, inquiry and management pages execute in guest mode without exceptions: PASS.
 
-## Manual tests still required on deployed Streamlit
-1. Register an Artisan account and a Buyer account.
-2. Sign in/out with both accounts.
-3. Confirm Buyer cannot publish, edit or remove artisan listings.
-4. Confirm Artisan A cannot edit/remove Artisan B's listings.
-5. Submit a buyer inquiry and confirm it appears only for the listing's artisan and the buyer.
-6. Accept the inquiry as the artisan and create the order.
-7. Confirm the buyer sees the resulting order in My Orders.
-8. Confirm records survive a Streamlit restart; if not, configure a managed persistent database.
+## Pages tested
+Artisan Marketplace, Raw Materials Marketplace, Chat Box, Buyer Inquiries, My Profile, My Listings, Dashboard, Inventory, Production Orders, Product Catalogue, About Project.
 
-## Known limitations
-This is prototype-grade authentication and authorization, not a production identity service. No email verification, password reset, MFA, rate limiting, account recovery or admin moderation. Streamlit Community Cloud's local filesystem is not guaranteed to persist; external database and object storage are recommended for a real multi-user deployment.
+## Limitation
+Streamlit is not installed in this execution environment, so browser-level visual/integration testing was not possible. Tests used a lightweight Streamlit API stub plus real SQLite databases. Please verify the final hosted deployment after commit.
