@@ -270,7 +270,10 @@ elif page=="Messages":
             if not m.read_status and st.button("Mark read",key=f"read_{m.id}"): x("UPDATE messages SET read_status=1 WHERE id=?",(int(m.id),)); st.rerun()
     st.markdown("### Sent messages")
     sent=q("SELECT sent_at,recipient,subject,body FROM messages WHERE lower(sender)=lower(?) ORDER BY id DESC",(user,))
-    st.dataframe(sent,use_container_width=True,hide_index=True) if not sent.empty else st.caption("No sent messages yet.")
+    if not sent.empty:
+        st.dataframe(sent, use_container_width=True, hide_index=True)
+    else:
+        st.caption("No sent messages yet.")
 
 elif page=="Buyer Inquiries":
     hero("Buyer Inquiries","Review and update inquiries submitted against marketplace listings.")
@@ -298,7 +301,13 @@ elif page=="Dashboard":
         else: st.info("No orders.")
     with b:
         st.markdown("### Low-stock materials")
-        st.dataframe(low[["name","quantity","unit","min_stock"]].rename(columns={"name":"Material","quantity":"Quantity","unit":"Unit","min_stock":"Minimum"}),use_container_width=True,hide_index=True) if not low.empty else st.success("No low-stock materials.")
+        if not low.empty:
+            low_display = low[["name", "quantity", "unit", "min_stock"]].rename(
+                columns={"name": "Material", "quantity": "Quantity", "unit": "Unit", "min_stock": "Minimum"}
+            )
+            st.dataframe(low_display, use_container_width=True, hide_index=True)
+        else:
+            st.success("No low-stock materials.")
     st.caption(f"Messages stored: {len(ms)} • Inquiries: {len(i)}. Counts are from this app database.")
 
 elif page=="Inventory":
