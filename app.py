@@ -249,6 +249,36 @@ def init():
         if c.execute("SELECT COUNT(*) FROM products").fetchone()[0]==0:
             c.executemany("INSERT INTO products(name,category,price,description,created_at) VALUES(?,?,?,?,?)",[
             ("Classic Cotton Shirt","Shirts",699,"Demo product",today),("Festive Kurta","Ethnic Wear",1199,"Demo product",today)])
+        # Add a consistent catalogue set for presentations, including upgrades of older databases.
+        catalogue_demo = [
+            ("Classic Cotton Shirt", "Shirts", 699, "Breathable everyday cotton shirt with a regular fit, reinforced seams and a clean button-down finish.", today),
+            ("Festive Zari Kurta", "Ethnic Wear", 1499, "Festive kurta featuring subtle zari detailing, a comfortable lining and a straight silhouette.", today),
+            ("Indigo Printed Dupatta", "Accessories", 549, "Lightweight cotton dupatta with an indigo-inspired repeating print and finished edges.", today),
+            ("Handcrafted Tote Bag", "Bags", 799, "Reusable fabric tote with reinforced handles and a handcrafted decorative panel.", today),
+            ("Kids Occasion Waistcoat", "Kids Wear", 899, "Lightweight occasion waistcoat designed for comfortable layering and easy movement.", today),
+            ("Block Print Cushion Cover", "Home Textiles", 399, "Decorative cushion cover with a repeat block-print pattern and concealed closure.", today),
+            ("Embroidered Stole", "Accessories", 999, "Soft woven stole finished with hand-embroidered floral accents along the border.", today),
+            ("Cotton Lounge Set", "Loungewear", 1299, "Two-piece cotton lounge set designed for relaxed everyday comfort.", today),
+            ("Decorative Fabric Gift Set", "Gift Items", 599, "Curated set of decorative fabric pieces suitable for gifting and craft projects.", today),
+            ("Printed Kids Frock", "Kids Wear", 749, "Printed cotton frock with a comfortable fit and neatly finished seams.", today),
+        ]
+        for product in catalogue_demo:
+            if not c.execute("SELECT 1 FROM products WHERE name=?", (product[0],)).fetchone():
+                c.execute("INSERT INTO products(name,category,price,description,created_at) VALUES(?,?,?,?,?)", product)
+        # Expand the materials table for a useful but compact stock-control demonstration.
+        material_demo = [
+            ("Cotton Fabric", "Fabric", 120, "metres", 30, "Demo Fabric Supply", today),
+            ("Silk Blend Fabric", "Fabric", 42, "metres", 15, "Demo Textile House", today),
+            ("Black Stitching Thread", "Thread", 18, "spools", 10, "Demo Thread Supply", today),
+            ("Embroidery Thread Set", "Thread", 24, "sets", 8, "Demo Thread Supply", today),
+            ("Metal Buttons", "Accessories", 250, "pcs", 80, "Demo Trim Supply", today),
+            ("Concealed Zippers", "Accessories", 22, "pcs", 25, "Demo Trim Supply", today),
+            ("Lining Fabric", "Fabric", 45, "metres", 15, "Demo Fabric Supply", today),
+            ("Packaging Covers", "Packaging", 90, "pcs", 30, "Demo Packaging Co.", today),
+        ]
+        for material in material_demo:
+            if not c.execute("SELECT 1 FROM materials WHERE name=?", (material[0],)).fetchone():
+                c.execute("INSERT INTO materials(name,category,quantity,unit,min_stock,supplier,updated_at) VALUES(?,?,?,?,?,?,?)", material)
         if c.execute("SELECT COUNT(*) FROM orders").fetchone()[0]==0:
             c.execute("INSERT INTO orders(order_code,product_name,quantity,due_date,status,notes,created_at) VALUES(?,?,?,?,?,?,?)",("ORD-1001","Classic Cotton Shirt",40,today,"In Progress","Sample order",today))
         if c.execute("SELECT COUNT(*) FROM listings").fetchone()[0]==0:
@@ -738,20 +768,28 @@ elif page=="Dashboard":
     st.caption(f"Messages stored: {len(ms)} • Inquiries: {len(i)}. Counts are from this app database.")
 
 elif page=="Inventory":
-    hero("Inventory Management","Maintain material quantities and low-stock thresholds.")
-    if not signed_in:
-        st.info("Sign in to access inventory management.")
+    hero("Inventory Management", "A clear stock register for materials used across production.")
+    df=q("SELECT name,category,quantity,unit,min_stock,supplier,updated_at FROM materials ORDER BY category,name")
+    if not df.empty:
+        df["Stock status"] = df.apply(lambda r: "Low stock" if r.quantity <= r.min_stock else "In stock", axis=1)
+        view=df.rename(columns={"name":"Material","category":"Category","quantity":"Available","unit":"Unit","min_stock":"Reorder level","supplier":"Supplier","updated_at":"Last updated"})
+        st.dataframe(view[["Material","Category","Available","Unit","Reorder level","Stock status","Supplier","Last updated"]], use_container_width=True, hide_index=True,
+                     column_config={"Available":st.column_config.NumberColumn(format="%d"),"Reorder level":st.column_config.NumberColumn(format="%d")})
+        low=int((df.quantity<=df.min_stock).sum())
+        st.caption(f"{len(df)} material records • {low} at or below reorder level. Demo supplier details are fictional.")
     else:
-        df=q("SELECT * FROM materials ORDER BY name")
-        st.dataframe(df,use_container_width=True,hide_index=True)
-        with st.expander("Add material"):
+        st.info("No inventory records yet.")
+    if signed_in and signed_in.get("role")=="Artisan":
+        with st.expander("Add inventory item"):
             with st.form("add_material"):
-                a,b=st.columns(2); name=a.text_input("Name"); cat=b.selectbox("Category",["Fabric","Thread","Accessories","Packaging","Other"])
-                a,b,c=st.columns(3); qty=a.number_input("Quantity",min_value=0); unit=b.selectbox("Unit",["pcs","metres","kg","spools","rolls","sets"]); minimum=c.number_input("Minimum stock",min_value=0,value=5)
-                supplier=st.text_input("Supplier"); submit=st.form_submit_button("Add",type="primary")
+                a,b=st.columns(2); name=a.text_input("Material name"); cat=b.selectbox("Category",["Fabric","Thread","Accessories","Packaging","Other"])
+                a,b,c=st.columns(3); qty=a.number_input("Available quantity",min_value=0); unit=b.selectbox("Unit",["pcs","metres","kg","spools","rolls","sets"]); minimum=c.number_input("Reorder level",min_value=0,value=5)
+                supplier=st.text_input("Supplier"); submit=st.form_submit_button("Add material",type="primary")
             if submit:
                 if not name.strip(): st.error("Enter a material name.")
-                else: x("INSERT INTO materials(name,category,quantity,unit,min_stock,supplier,updated_at) VALUES(?,?,?,?,?,?,?)",(name.strip(),cat,int(qty),unit,int(minimum),supplier.strip(),date.today().isoformat())); st.success("Added."); st.rerun()
+                else: x("INSERT INTO materials(name,category,quantity,unit,min_stock,supplier,updated_at) VALUES(?,?,?,?,?,?,?)",(name.strip(),cat,int(qty),unit,int(minimum),supplier.strip(),date.today().isoformat())); st.success("Material added."); st.rerun()
+    else:
+        st.caption("Inventory is shown in read-only demo mode. Sign in with an Artisan account to add records.")
 elif page=="Production Orders":
     if not signed_in:
         st.info("Sign in to access this section.")
@@ -772,17 +810,51 @@ elif page=="Production Orders":
                 if not code.strip() or not product: st.error("Enter order ID and product.")
                 else: x("INSERT INTO orders(order_code,product_name,quantity,due_date,status,notes,created_at) VALUES(?,?,?,?,?,?,?)",(code.strip(),product,int(qty),due.isoformat(),status,notes.strip(),date.today().isoformat())); st.success("Created."); st.rerun()
 elif page=="Product Catalogue":
-    if not signed_in:
-        st.info("Sign in to access this section.")
+    hero("Product Catalogue", "Explore finished products with detailed descriptions, pricing and categories.")
+    df=q("SELECT id,name,category,price,description,created_at FROM products ORDER BY category,name")
+    if not df.empty:
+        a,b,c=st.columns(3)
+        a.metric("Products",len(df)); b.metric("Categories",df.category.nunique()); c.metric("Price range",f"₹{df.price.min():,.0f} – ₹{df.price.max():,.0f}")
+        st.divider()
+        f1,f2=st.columns([1.5,1])
+        search=f1.text_input("Search catalogue",placeholder="Search product name or description")
+        categories=["All categories"]+sorted(df.category.dropna().unique().tolist())
+        category=f2.selectbox("Category",categories)
+        filtered=df.copy()
+        if search.strip():
+            mask=filtered.apply(lambda r: search.lower() in f"{r['name']} {r['description']} {r['category']}".lower(),axis=1)
+            filtered=filtered[mask]
+        if category!="All categories": filtered=filtered[filtered.category==category]
+        st.caption(f"Showing {len(filtered)} of {len(df)} catalogue products • Prices in INR")
+        if filtered.empty:
+            st.info("No products match your search. Try another term or category.")
+        else:
+            icons={"Shirts":"👕","Ethnic Wear":"🧵","Accessories":"👜","Bags":"👜","Kids Wear":"🧒","Home Textiles":"🏡","Loungewear":"☁️","Gift Items":"🎁"}
+            for offset in range(0,len(filtered),2):
+                cols=st.columns(2)
+                for col,(_,r) in zip(cols,filtered.iloc[offset:offset+2].iterrows()):
+                    with col:
+                        st.markdown('<div class="listing-card">',unsafe_allow_html=True)
+                        st.markdown(f"### {icons.get(r.category,'✦')}  {r['name']}")
+                        st.markdown(f"<span class='listing-price'>₹{float(r.price):,.2f}</span>  ·  <span style='color:#526579'>{r.category}</span>",unsafe_allow_html=True)
+                        st.write(str(r.description or "No description provided."))
+                        st.caption(f"Product ID: PRD-{int(r.id):04d}  ·  Added: {r.created_at}")
+                        st.markdown('</div>',unsafe_allow_html=True)
+            with st.expander("View complete catalogue table"):
+                table=filtered.rename(columns={"id":"ID","name":"Product","category":"Category","price":"Price (₹)","description":"Description","created_at":"Date added"})
+                st.dataframe(table,use_container_width=True,hide_index=True)
     else:
-        hero("Product Catalogue","Maintain the simple product catalogue.")
-        df=q("SELECT * FROM products ORDER BY name"); st.dataframe(df,use_container_width=True,hide_index=True)
-        with st.expander("Add product"):
+        st.info("No catalogue products are available yet.")
+    if signed_in and signed_in.get("role")=="Artisan":
+        with st.expander("Add a catalogue product"):
             with st.form("new_product"):
-                name=st.text_input("Product name"); cat=st.selectbox("Category",["Shirts","Ethnic Wear","Accessories","Gift Items","Other"]); price=st.number_input("Price (₹)",min_value=0.0); desc=st.text_area("Description"); submit=st.form_submit_button("Add",type="primary")
+                name=st.text_input("Product name"); cat=st.selectbox("Category",["Shirts","Ethnic Wear","Accessories","Bags","Kids Wear","Home Textiles","Loungewear","Gift Items","Other"]); price=st.number_input("Price (₹)",min_value=0.0); desc=st.text_area("Detailed description",placeholder="Describe the material, design, finish and intended use..."); submit=st.form_submit_button("Add product",type="primary")
             if submit:
                 if not name.strip(): st.error("Enter product name.")
-                else: x("INSERT INTO products(name,category,price,description,created_at) VALUES(?,?,?,?,?)",(name.strip(),cat,float(price),desc.strip(),date.today().isoformat())); st.success("Added."); st.rerun()
+                else: x("INSERT INTO products(name,category,price,description,created_at) VALUES(?,?,?,?,?)",(name.strip(),cat,float(price),desc.strip(),date.today().isoformat())); st.success("Product added."); st.rerun()
+    else:
+        st.caption("Catalogue is publicly viewable. Sign in with an Artisan account to add products.")
+
 else:
     hero("About Project","A student prototype inspired by the Nagpur Readymade Garment Cluster case-study context.")
     st.markdown("""
