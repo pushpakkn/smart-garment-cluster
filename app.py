@@ -18,6 +18,62 @@ st.markdown("""
 [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
 [data-testid="stSidebar"] label{color:#f0f6fb!important}
 [data-testid="stSidebar"] input{background:#ffffff!important;color:#172b4d!important;-webkit-text-fill-color:#172b4d!important;border:2px solid #9db7c9!important}
+/* Refined sidebar navigation */
+[data-testid="stSidebar"] > div:first-child {padding-top:1.25rem}
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h2 {
+  font-size:1.16rem!important; letter-spacing:-.02em; margin-bottom:.15rem!important;
+}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
+  color:#b9ccda!important; font-size:.78rem!important; line-height:1.45;
+}
+.nav-kicker {
+  color:#8eafc2!important; font-size:.68rem!important; font-weight:800!important;
+  letter-spacing:.13em!important; text-transform:uppercase!important;
+  margin:1.05rem 0 .35rem!important;
+}
+.nav-hint {
+  color:#b9ccda!important; font-size:.75rem!important; margin:.05rem 0 .55rem!important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] > div {
+  gap:.22rem!important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label {
+  display:flex!important; align-items:center!important;
+  background:rgba(255,255,255,.045)!important;
+  border:1px solid rgba(220,238,248,.10)!important;
+  border-radius:10px!important;
+  padding:.48rem .62rem!important;
+  margin:0!important;
+  min-height:2.35rem!important;
+  transition:background .15s ease,border-color .15s ease!important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+  background:rgba(255,255,255,.11)!important;
+  border-color:rgba(185,220,237,.38)!important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
+  background:linear-gradient(100deg,rgba(8,127,140,.48),rgba(8,127,140,.20))!important;
+  border:1px solid #35b7b1!important;
+  box-shadow:inset 3px 0 0 #55d0c6!important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label p {
+  color:#eaf3f8!important; font-size:.86rem!important; font-weight:600!important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) p {
+  color:#ffffff!important; font-weight:750!important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] input {
+  accent-color:#55d0c6!important;
+}
+.sidebar-user-label {
+  color:#dce9f1!important; font-size:.78rem!important; font-weight:700!important;
+  margin:.8rem 0 .25rem!important;
+}
+.sidebar-foot {
+  border-top:1px solid rgba(220,238,248,.16); padding-top:.9rem; margin-top:1.1rem;
+  color:#9fb8c9!important; font-size:.72rem!important; line-height:1.5;
+}
+
 .hero{padding:1.45rem 1.65rem;border-radius:18px;background:linear-gradient(115deg,#12344d,#087f8c);margin-bottom:1.15rem}
 .hero h1,.hero p{color:#fff!important}.hero h1{margin:0 0 .35rem}.hero p{margin:0;color:#e7f5f5!important}
 h1,h2,h3,h4,h5,h6,p,li,label,[data-testid="stMarkdownContainer"],
@@ -132,13 +188,66 @@ with db() as conn:
         conn.commit()
 
 def hero(t,s): st.markdown(f'<div class="hero"><h1>{t}</h1><p>{s}</p></div>',unsafe_allow_html=True)
+def _select_market_nav():
+    st.session_state["active_page"] = st.session_state["market_nav"]
+
+def _select_operations_nav():
+    st.session_state["active_page"] = st.session_state["operations_nav"]
+
 with st.sidebar:
     st.markdown("## 🧵 Garment Marketplace")
     st.caption("Cluster trade & communication workspace")
-    who=st.text_input("Your demo name",value=st.session_state.get("who","Pushpak")).strip() or "Guest"
+
+    st.markdown('<div class="sidebar-user-label">YOUR DEMO PROFILE</div>', unsafe_allow_html=True)
+    who=st.text_input(
+        "Your demo name",
+        value=st.session_state.get("who","Pushpak"),
+        label_visibility="collapsed",
+        placeholder="Enter demo name"
+    ).strip() or "Guest"
     st.session_state["who"]=who
-    page=st.radio("NAVIGATION",["Artisan Marketplace","Raw Materials Marketplace","Messages","Buyer Inquiries","Dashboard","Inventory","Production Orders","Product Catalogue","About Project"])
-    st.divider(); st.caption("Student prototype • fictional demo records")
+
+    st.markdown('<div class="nav-kicker">Marketplace & community</div>', unsafe_allow_html=True)
+    st.markdown('<div class="nav-hint">Discover work and connect with artisans</div>', unsafe_allow_html=True)
+    market_options = ["Artisan Marketplace", "Raw Materials Marketplace", "Messages", "Buyer Inquiries"]
+    st.session_state.setdefault("market_nav", st.session_state.get("active_page", "Artisan Marketplace"))
+    st.radio(
+        "Marketplace navigation",
+        market_options,
+        key="market_nav",
+        on_change=_select_market_nav,
+        label_visibility="collapsed",
+        format_func=lambda x: {
+            "Artisan Marketplace":"🎨  Artisan Marketplace",
+            "Raw Materials Marketplace":"🧵  Raw Materials",
+            "Messages":"✉️  Messages",
+            "Buyer Inquiries":"🤝  Buyer Inquiries"
+        }[x]
+    )
+
+    st.markdown('<div class="nav-kicker">Cluster management</div>', unsafe_allow_html=True)
+    st.markdown('<div class="nav-hint">Manage operations and project data</div>', unsafe_allow_html=True)
+    operations_options = ["Dashboard", "Inventory", "Production Orders", "Product Catalogue", "About Project"]
+    st.session_state.setdefault("operations_nav", st.session_state.get("active_page", "Dashboard"))
+    st.radio(
+        "Management navigation",
+        operations_options,
+        key="operations_nav",
+        on_change=_select_operations_nav,
+        label_visibility="collapsed",
+        format_func=lambda x: {
+            "Dashboard":"▦  Dashboard",
+            "Inventory":"📦  Inventory",
+            "Production Orders":"🧾  Production Orders",
+            "Product Catalogue":"🛍️  Product Catalogue",
+            "About Project":"ⓘ  About Project"
+        }[x]
+    )
+    page = st.session_state.get("active_page", "Artisan Marketplace")
+    st.markdown(
+        '<div class="sidebar-foot">STUDENT PROTOTYPE<br>Fictional demonstration records</div>',
+        unsafe_allow_html=True
+    )
 user=st.session_state["who"]
 
 def render_marketplace(kind):
