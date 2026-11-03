@@ -1,30 +1,23 @@
-# Smart Garment Cluster Management System — Streamlit Edition
+# Artisan & Garment Cluster Marketplace
 
-A simple local prototype for a student project inspired by the Nagpur Readymade Garment Cluster case study.
+Student demonstration prototype built with Python, Streamlit, SQLite and Pandas.
 
-## Features
-- Dashboard with inventory, products, production orders and low-stock alerts
-- Inventory: add materials, update quantities/minimum levels, search and delete
-- Production orders: create orders, filter by status, update and delete
-- Product catalogue: search/filter products and add catalogue entries
-- SQLite database that stores changes locally
-- Clearly labelled fictional sample data for demonstration
+## Marketplace structure
+- **Artisan Marketplace** is the main creative marketplace. It contains only artisan work: original artwork, embroidery, handcrafted accessories, print designs and textile art.
+- **Raw Materials Marketplace** is separate and contains fabric, thread, trims, packaging and garment-making supplies.
+- Both marketplaces include a publish form with image upload (PNG/JPG/JPEG), description, price, quantity, seller and location.
+- Sample artisan artwork thumbnails are included in `artwork_samples/`. Listings can also display images uploaded by the user.
 
-## Run on Ubuntu / Linux
-
-Open a terminal in this folder and run:
-
+## Run
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-Streamlit will show a local URL, usually `http://localhost:8501`. Open it in your browser.
+## GitHub / Streamlit deployment
+Upload `app.py`, `requirements.txt`, `README.md`, the `.streamlit/config.toml` file, and the `artwork_samples` folder to the repository root. GitHub web upload may require uploading the image files individually or using GitHub Desktop.
 
-## Data storage
-The app creates `garment_cluster.db` in this folder on first run. This file stores all records you add or edit. Keep a backup if you want to preserve your data.
+## Demo communication
+The app seeds fictional sample messages once if the messages table is empty. Change the sidebar demo name to `Pushpak`, `Demo Fabric Supplier`, `Studio Rangrekha`, `Sakhi Embroidery Unit`, or `Demo Garment Unit` to view both sides of the sample conversation.
 
-## Important note
-This is a student prototype, not an official SFURTI application. The preloaded records are fictional sample data and are not actual cluster business records.
+All listings, people and messages are fictional. This is not official SFURTI software. Messages are stored in SQLite and are not live chat, email or SMS. No authentication, payment, shipping or verified identity is implemented.

@@ -9,16 +9,39 @@ st.set_page_config(page_title="Garment Cluster Marketplace", page_icon="🧵", l
 
 st.markdown("""
 <style>
-.stApp{background:linear-gradient(135deg,#edf5f4,#e7eff5)}
-.block-container{max-width:1400px;padding-top:1.4rem}
-[data-testid="stSidebar"]{background:linear-gradient(180deg,#102a43,#163e5c)}
-[data-testid="stSidebar"] *{color:#f4f8fb!important}
-.hero{padding:1.3rem 1.5rem;border-radius:18px;background:linear-gradient(115deg,#12344d,#147d79);color:white;margin-bottom:1rem}
-.hero h1{color:white;margin:0 0 .3rem}.hero p{color:#e2f4f3;margin:0}
-div[data-testid="stMetric"]{background:#e0efed;border:1px solid #b8d8d4;padding:16px;border-radius:15px}
-[data-testid="stMetricLabel"],[data-testid="stMetricLabel"] *,[data-testid="stMetricValue"],[data-testid="stMetricValue"] *{color:#18384d!important}
-.stButton button[kind="primary"],.stFormSubmitButton button[kind="primary"]{background:#147d79;border-color:#147d79;color:white}
-[data-baseweb="tab-list"] button[aria-selected="true"]{border-bottom:2px solid #36c2b4!important}
+:root{color-scheme:light}
+.stApp{background:#f3f6fa!important;color:#172b4d!important}
+.block-container{max-width:1440px;padding-top:1.4rem;padding-bottom:3rem}
+[data-testid="stHeader"]{background:#f3f6fa!important}
+[data-testid="stSidebar"]{background:#102f46!important;border-right:1px solid #244b63}
+[data-testid="stSidebar"] *{color:#f7fbff!important}
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+[data-testid="stSidebar"] label{color:#f0f6fb!important}
+[data-testid="stSidebar"] input{background:#ffffff!important;color:#172b4d!important;-webkit-text-fill-color:#172b4d!important;border:2px solid #9db7c9!important}
+.hero{padding:1.45rem 1.65rem;border-radius:18px;background:linear-gradient(115deg,#12344d,#087f8c);margin-bottom:1.15rem}
+.hero h1,.hero p{color:#fff!important}.hero h1{margin:0 0 .35rem}.hero p{margin:0;color:#e7f5f5!important}
+h1,h2,h3,h4,h5,h6,p,li,label,[data-testid="stMarkdownContainer"],
+[data-testid="stWidgetLabel"],[data-testid="stCaptionContainer"]{color:#172b4d!important}
+[data-testid="stCaptionContainer"] p,.stCaption{color:#526579!important}
+[data-testid="stTextInput"] input,[data-testid="stNumberInput"] input,
+[data-testid="stTextArea"] textarea,[data-baseweb="select"]>div{
+ background:#fff!important;color:#172b4d!important;-webkit-text-fill-color:#172b4d!important;
+ border:1px solid #aebfce!important;border-radius:9px!important
+}
+[data-testid="stTextInput"] input::placeholder,[data-testid="stTextArea"] textarea::placeholder{color:#65788a!important;-webkit-text-fill-color:#65788a!important;opacity:1!important}
+[data-baseweb="select"] *,[role="option"]{color:#172b4d!important}
+[data-testid="stWidgetLabel"] p{color:#263f56!important;font-weight:600!important}
+[data-testid="stMetric"]{background:#fff!important;border:1px solid #d5e0e9!important;padding:16px!important;border-radius:14px!important}
+[data-testid="stMetricLabel"],[data-testid="stMetricLabel"] *,
+[data-testid="stMetricValue"],[data-testid="stMetricValue"] *{color:#173b53!important}
+.stButton button[kind="primary"],.stFormSubmitButton button[kind="primary"]{background:#087f8c!important;border:1px solid #087f8c!important;color:#fff!important}
+.stButton button:not([kind="primary"]),.stFormSubmitButton button:not([kind="primary"]){background:#fff!important;color:#173b53!important;border:1px solid #aebfce!important}
+[data-testid="stExpander"]{background:#fff!important;border:1px solid #d5e0e9!important;border-radius:12px!important}
+[data-testid="stExpander"] summary,[data-testid="stExpander"] summary *{color:#173b53!important}
+[data-baseweb="tab-list"] button{color:#344e63!important}
+[data-baseweb="tab-list"] button[aria-selected="true"]{color:#087f8c!important;border-bottom:3px solid #087f8c!important}
+.listing-card{background:#fff;border:1px solid #d5e0e9;border-radius:14px;padding:1rem;margin:.5rem 0}
+.listing-card h3{color:#173b53!important}.listing-price{color:#087f8c!important;font-size:1.08rem;font-weight:750}
 </style>
 """, unsafe_allow_html=True)
 
@@ -35,7 +58,11 @@ def init():
         c.execute("""CREATE TABLE IF NOT EXISTS materials(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,category TEXT NOT NULL,quantity INTEGER NOT NULL DEFAULT 0,unit TEXT NOT NULL DEFAULT 'pcs',min_stock INTEGER NOT NULL DEFAULT 5,supplier TEXT DEFAULT '',updated_at TEXT NOT NULL)""")
         c.execute("""CREATE TABLE IF NOT EXISTS products(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,category TEXT NOT NULL,price REAL NOT NULL DEFAULT 0,description TEXT DEFAULT '',created_at TEXT NOT NULL)""")
         c.execute("""CREATE TABLE IF NOT EXISTS orders(id INTEGER PRIMARY KEY AUTOINCREMENT,order_code TEXT NOT NULL,product_name TEXT NOT NULL,quantity INTEGER NOT NULL,due_date TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'Pending',notes TEXT DEFAULT '',created_at TEXT NOT NULL)""")
-        c.execute("""CREATE TABLE IF NOT EXISTS listings(id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,category TEXT NOT NULL,description TEXT DEFAULT '',price REAL NOT NULL,quantity INTEGER NOT NULL,unit TEXT NOT NULL,seller TEXT NOT NULL,location TEXT DEFAULT '',status TEXT NOT NULL DEFAULT 'Available',created_at TEXT NOT NULL)""")
+        c.execute("""CREATE TABLE IF NOT EXISTS listings(id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,category TEXT NOT NULL,description TEXT DEFAULT '',price REAL NOT NULL,quantity INTEGER NOT NULL,unit TEXT NOT NULL,seller TEXT NOT NULL,location TEXT DEFAULT '',status TEXT NOT NULL DEFAULT 'Available',created_at TEXT NOT NULL, image BLOB)""")
+        # Backward-compatible migration for existing hosted/local databases.
+        cols = [r[1] for r in c.execute("PRAGMA table_info(listings)").fetchall()]
+        if "image" not in cols:
+            c.execute("ALTER TABLE listings ADD COLUMN image BLOB")
         c.execute("""CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT,sender TEXT NOT NULL,recipient TEXT NOT NULL,subject TEXT NOT NULL,body TEXT NOT NULL,listing_id INTEGER,sent_at TEXT NOT NULL,read_status INTEGER NOT NULL DEFAULT 0)""")
         c.execute("""CREATE TABLE IF NOT EXISTS inquiries(id INTEGER PRIMARY KEY AUTOINCREMENT,listing_id INTEGER NOT NULL,buyer TEXT NOT NULL,quantity INTEGER NOT NULL,message TEXT DEFAULT '',status TEXT NOT NULL DEFAULT 'New',created_at TEXT NOT NULL)""")
         today=date.today().isoformat()
@@ -49,11 +76,60 @@ def init():
             c.execute("INSERT INTO orders(order_code,product_name,quantity,due_date,status,notes,created_at) VALUES(?,?,?,?,?,?,?)",("ORD-1001","Classic Cotton Shirt",40,today,"In Progress","Sample order",today))
         if c.execute("SELECT COUNT(*) FROM listings").fetchone()[0]==0:
             c.executemany("INSERT INTO listings(title,category,description,price,quantity,unit,seller,location,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",[
-            ("Cotton Fabric Roll","Fabric","Demo listing for cotton fabric",185,120,"metres","Demo Fabric Supplier","Nagpur","Available",today),
-            ("Bulk Buttons","Accessories","Demo listing for garment making",2.5,250,"pcs","Demo Accessories Shop","Nagpur","Available",today),
-            ("Stitching Thread","Thread","Demo listing for thread spools",38,18,"spools","Demo Thread Supplier","Nagpur","Available",today),
-            ("Cotton Shirt","Finished Garments","Demo finished garment listing",420,35,"pcs","Demo Garment Unit","Nagpur","Available",today)])
+            ("Madhubani Floral Motif Set","Artwork","Original Madhubani-inspired motif collection for kurta panels and dupattas.",650,12,"designs","Studio Rangrekha","Nagpur","Available",today),
+            ("Warli Border Illustration","Artwork","Hand-drawn Warli-inspired border artwork for stoles, shirts and home textiles.",480,18,"designs","Adivasi Art Collective","Nagpur","Available",today),
+            ("Mirror-Work Embroidery Patches","Embroidery","Handcrafted mirror-work patches for jackets, bags and festive garments.",55,100,"pcs","Sakhi Embroidery Unit","Nagpur","Available",today),
+            ("Block-Print Floral Artwork","Print Designs","Repeat floral artwork suitable for cotton fabric printing.",720,8,"designs","PrintCraft Studio","Nagpur","Available",today),
+            ("Cotton Fabric Roll","Fabric","Demo raw material listing for cotton fabric.",185,120,"metres","Demo Fabric Supplier","Nagpur","Available",today),
+            ("Bulk Buttons","Accessories","Demo raw material listing for garment making.",2.5,250,"pcs","Demo Accessories Shop","Nagpur","Available",today),
+            ("Stitching Thread","Thread","Demo raw material listing for thread spools.",38,18,"spools","Demo Thread Supplier","Nagpur","Available",today)])
 init()
+
+
+# Ensure the artisan marketplace has demo artwork even when upgrading an older database.
+art_demo = [
+    ("Madhubani Floral Motif Set","Artwork","Original Madhubani-inspired motif collection for kurta panels and dupattas.",650,12,"designs","Studio Rangrekha","Nagpur","Available",date.today().isoformat()),
+    ("Warli Border Illustration","Artwork","Hand-drawn Warli-inspired border artwork for stoles, shirts and home textiles.",480,18,"designs","Adivasi Art Collective","Nagpur","Available",date.today().isoformat()),
+    ("Mirror-Work Embroidery Patches","Embroidery","Handcrafted mirror-work patches for jackets, bags and festive garments.",55,100,"pcs","Sakhi Embroidery Unit","Nagpur","Available",date.today().isoformat()),
+    ("Block-Print Floral Artwork","Print Designs","Repeat floral artwork suitable for cotton fabric printing.",720,8,"designs","PrintCraft Studio","Nagpur","Available",date.today().isoformat())
+]
+with db() as conn:
+    for item in art_demo:
+        if not conn.execute("SELECT 1 FROM listings WHERE title=?", (item[0],)).fetchone():
+            conn.execute("INSERT INTO listings(title,category,description,price,quantity,unit,seller,location,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",item)
+    conn.commit()
+
+# Attach included sample artwork images to the matching demo listings.
+sample_images = {
+    "Madhubani Floral Motif Set": "madhubani_motifs.png",
+    "Warli Border Illustration": "warli_art.png",
+    "Mirror-Work Embroidery Patches": "mirror_embroidery.png",
+    "Block-Print Floral Artwork": "textile_print.png"
+}
+with db() as conn:
+    for title, filename in sample_images.items():
+        image_path = Path(__file__).parent / "artwork_samples" / filename
+        if image_path.exists():
+            conn.execute("UPDATE listings SET image=? WHERE title=? AND image IS NULL",
+                         (image_path.read_bytes(), title))
+    conn.commit()
+
+# Seed fictional back-and-forth messages once for a populated classroom demonstration.
+with db() as conn:
+    if conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 0:
+        demo_pairs = [
+            ("Demo Fabric Supplier","Pushpak","Fabric sample request","Hello! We have cotton fabric swatches in natural, white and indigo. Would you like to see the options?",None,"2026-11-02T10:15"),
+            ("Pushpak","Demo Fabric Supplier","Re: Fabric sample request","Yes, please. I am particularly interested in indigo and natural cotton. What is the minimum order quantity?",None,"2026-11-02T10:22"),
+            ("Demo Fabric Supplier","Pushpak","Re: Fabric sample request","The minimum order is 10 metres. We can keep a sample ready for collection in Nagpur.",None,"2026-11-02T10:31"),
+            ("Pushpak","Studio Rangrekha","Artwork customisation","Can the Madhubani-inspired motif colours be adjusted to match a festive kurta collection?",None,"2026-11-02T11:05"),
+            ("Studio Rangrekha","Pushpak","Re: Artwork customisation","Absolutely. We can prepare a customised colour palette and a placement preview for the front panel.",None,"2026-11-02T11:18"),
+            ("Sakhi Embroidery Unit","Pushpak","Mirror-work samples","We can prepare a sample set of mirror-work patches. Do you prefer a floral or geometric pattern?",None,"2026-11-02T12:02"),
+            ("Pushpak","Sakhi Embroidery Unit","Re: Mirror-work samples","A floral pattern would be great. Please share the sample price and expected preparation time.",None,"2026-11-02T12:16"),
+            ("Demo Garment Unit","Pushpak","Small batch collaboration","We are interested in collaborating on a small batch of printed cotton shirts. Can you share the artwork details?",None,"2026-11-02T13:40"),
+            ("Pushpak","Demo Garment Unit","Re: Small batch collaboration","I can share a few design options. Let's begin with a small sample batch and review the print quality.",None,"2026-11-02T13:52")
+        ]
+        conn.executemany("INSERT INTO messages(sender,recipient,subject,body,listing_id,sent_at,read_status) VALUES(?,?,?,?,?,?,0)",demo_pairs)
+        conn.commit()
 
 def hero(t,s): st.markdown(f'<div class="hero"><h1>{t}</h1><p>{s}</p></div>',unsafe_allow_html=True)
 with st.sidebar:
@@ -61,51 +137,112 @@ with st.sidebar:
     st.caption("Cluster trade & communication workspace")
     who=st.text_input("Your demo name",value=st.session_state.get("who","Pushpak")).strip() or "Guest"
     st.session_state["who"]=who
-    page=st.radio("NAVIGATION",["Marketplace","Messages","Buyer Inquiries","Dashboard","Inventory","Production Orders","Product Catalogue","About Project"])
+    page=st.radio("NAVIGATION",["Artisan Marketplace","Raw Materials Marketplace","Messages","Buyer Inquiries","Dashboard","Inventory","Production Orders","Product Catalogue","About Project"])
     st.divider(); st.caption("Student prototype • fictional demo records")
 user=st.session_state["who"]
 
-if page=="Marketplace":
-    hero("Garment Marketplace","Discover materials and garments, publish offers, and contact sellers.")
-    ls=q("SELECT * FROM listings WHERE status='Available' ORDER BY id DESC")
-    a,b,c=st.columns(3); a.metric("Available listings",len(ls)); b.metric("Categories",ls.category.nunique() if not ls.empty else 0); c.metric("Locations",ls.location.nunique() if not ls.empty else 0)
-    with st.expander("＋ Publish a listing"):
-        with st.form("listing_form",clear_on_submit=True):
-            a,b=st.columns(2); title=a.text_input("Listing title"); cat=b.selectbox("Category",["Fabric","Thread","Accessories","Finished Garments","Ethnic Wear","Other"])
-            desc=st.text_area("Description"); a,b,c=st.columns(3); price=a.number_input("Price per unit (₹)",min_value=0.0,value=100.0); qty=b.number_input("Available quantity",min_value=1,value=1); unit=c.selectbox("Unit",["pcs","metres","kg","spools","rolls","sets"])
-            a,b=st.columns(2); seller=a.text_input("Seller / business name",value=user); loc=b.text_input("Location",value="Nagpur")
-            submit=st.form_submit_button("Publish listing",type="primary")
-        if submit:
-            if not title.strip() or not seller.strip(): st.error("Enter a title and seller name.")
+def render_marketplace(kind):
+    artisan = kind == "artisan"
+    if artisan:
+        hero("Artisan & Artwork Marketplace","Discover original artwork, handcrafted details and designs created by local artisans.")
+        allowed = ["Artwork","Embroidery","Handcrafted Accessories","Print Designs","Textile Art"]
+        heading = "Browse artisan creations"
+        form_key = "artisan_listing"
+        categories = allowed
+        empty_msg = "No artisan creations found yet. Be the first to publish an artwork listing."
+    else:
+        hero("Raw Materials Marketplace","A separate sourcing space for fabrics, threads, trims and garment-making supplies.")
+        allowed = ["Fabric","Thread","Accessories","Packaging","Other"]
+        heading = "Browse raw materials"
+        form_key = "raw_listing"
+        categories = allowed
+        empty_msg = "No raw-material listings found. Publish a supply offer to get started."
+
+    existing = q("SELECT * FROM listings WHERE status='Available' ORDER BY id DESC")
+    filtered = existing[existing.category.isin(allowed)] if not existing.empty else existing
+    a,b,c=st.columns(3)
+    a.metric("Available offers",len(filtered))
+    b.metric("Categories",filtered.category.nunique() if not filtered.empty else 0)
+    c.metric("Artisans / suppliers",filtered.seller.nunique() if not filtered.empty else 0)
+
+    with st.expander("＋ Upload and publish a new listing",expanded=False):
+        st.write("Add a clear photo of the artwork or product. JPG, JPEG and PNG images are supported.")
+        with st.form(form_key,clear_on_submit=True):
+            col1,col2=st.columns(2)
+            title=col1.text_input("Title")
+            category=col2.selectbox("Category",categories)
+            description=st.text_area("Description",placeholder="Describe the technique, materials, size, customisation options or story behind the work.")
+            col1,col2,col3=st.columns(3)
+            price=col1.number_input("Price (₹)",min_value=0.0,value=250.0,step=10.0)
+            qty=col2.number_input("Available quantity",min_value=1,value=1)
+            unit=col3.selectbox("Unit",["piece","design","set","pcs","metres","kg","spools","rolls"])
+            col1,col2=st.columns(2)
+            seller=col1.text_input("Artisan / seller name",value=user)
+            location=col2.text_input("Location",value="Nagpur")
+            upload=st.file_uploader("Upload artwork / product image",type=["png","jpg","jpeg"],key=f"image_{kind}")
+            publish=st.form_submit_button("Publish listing",type="primary")
+        if publish:
+            if not title.strip() or not seller.strip():
+                st.error("Please enter a title and artisan / seller name.")
             else:
-                x("INSERT INTO listings(title,category,description,price,quantity,unit,seller,location,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",(title.strip(),cat,desc.strip(),price,int(qty),unit,seller.strip(),loc.strip(),"Available",date.today().isoformat()))
-                st.success("Listing published."); st.rerun()
-    st.markdown("### Browse listings")
-    search=st.text_input("Search marketplace",placeholder="Fabric, buttons, shirts...")
-    cats=["All"]+sorted(ls.category.unique().tolist()) if not ls.empty else ["All"]
-    catpick=st.selectbox("Category filter",cats)
-    shown=ls.copy()
+                image_bytes=upload.getvalue() if upload is not None else None
+                x("INSERT INTO listings(title,category,description,price,quantity,unit,seller,location,status,created_at,image) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                  (title.strip(),category,description.strip(),float(price),int(qty),unit,seller.strip(),location.strip(),"Available",date.today().isoformat(),image_bytes))
+                st.success("Your listing has been published.")
+                st.rerun()
+
+    st.markdown(f"### {heading}")
+    search=st.text_input("Search listings",placeholder="Search by title, description or artisan...")
+    catpick=st.selectbox("Category",["All"]+categories,key=f"category_{kind}")
+    shown=filtered.copy()
     if search and not shown.empty:
-        shown=shown[shown.title.str.contains(search,case=False,na=False)|shown.description.str.contains(search,case=False,na=False)|shown.seller.str.contains(search,case=False,na=False)]
-    if catpick!="All" and not shown.empty: shown=shown[shown.category==catpick]
-    if shown.empty: st.info("No listings found.")
+        mask=(shown.title.str.contains(search,case=False,na=False) |
+              shown.description.str.contains(search,case=False,na=False) |
+              shown.seller.str.contains(search,case=False,na=False))
+        shown=shown[mask]
+    if catpick!="All" and not shown.empty:
+        shown=shown[shown.category==catpick]
+    if shown.empty:
+        st.info(empty_msg)
     for _,r in shown.iterrows():
         with st.container(border=True):
-            a,b=st.columns([4,1])
-            with a:
-                st.markdown(f"### {r.title}"); st.caption(f"{r.category} • {r.seller} • {r.location}")
-                st.write(r.description); st.write(f"**₹{r.price:,.2f} / {r.unit}** · Quantity: **{r.quantity} {r.unit}**")
-            with b:
-                if st.button("Message seller",key=f"msg_{r.id}",type="primary"):
-                    st.session_state["recipient"]=r.seller; st.session_state["subject"]=f"Question about {r.title}"; st.session_state["related_listing"]=int(r.id)
-                    st.info("Go to Messages in the sidebar to compose your message.")
-                if st.button("Send inquiry",key=f"inq_{r.id}"): st.session_state["inq_listing"]=int(r.id)
+            pic,details,actions=st.columns([1.05,3.2,1.05])
+            with pic:
+                if r.get("image") is not None and not pd.isna(r.get("image")):
+                    st.image(bytes(r["image"]),use_container_width=True)
+                else:
+                    st.markdown(f"""<div style="height:150px;border-radius:12px;background:linear-gradient(135deg,#e8f3f2,#dce8f1);display:flex;align-items:center;justify-content:center;font-size:48px">{"🎨" if artisan else "🧵"}</div>""",unsafe_allow_html=True)
+            with details:
+                st.markdown(f"### {r.title}")
+                st.caption(f"{r.category}  ·  {r.seller}  ·  {r.location}")
+                st.write(r.description)
+                st.markdown(f'<div class="listing-price">₹{r.price:,.2f} / {r.unit}</div>',unsafe_allow_html=True)
+                st.caption(f"Available quantity: {r.quantity} {r.unit}")
+            with actions:
+                if st.button("Message seller",key=f"msg_{kind}_{r.id}",type="primary"):
+                    st.session_state["recipient"]=r.seller
+                    st.session_state["subject"]=f"Enquiry about {r.title}"
+                    st.session_state["related_listing"]=int(r.id)
+                    st.session_state["page_jump"]="Messages"
+                    st.info("Open Messages in the sidebar to contact this seller.")
+                if st.button("Send inquiry",key=f"inq_{kind}_{r.id}"):
+                    st.session_state["inq_listing"]=int(r.id)
             if st.session_state.get("inq_listing")==int(r.id):
-                with st.form(f"inq_form_{r.id}"):
-                    iq=st.number_input("Quantity requested",min_value=1,max_value=max(1,int(r.quantity)),value=1); msg=st.text_area("Requirements or question"); send=st.form_submit_button("Submit inquiry")
+                with st.form(f"inq_form_{kind}_{r.id}"):
+                    iq=st.number_input("Quantity requested",min_value=1,max_value=max(1,int(r.quantity)),value=1)
+                    msg=st.text_area("Requirements or question")
+                    send=st.form_submit_button("Submit inquiry")
                 if send:
-                    x("INSERT INTO inquiries(listing_id,buyer,quantity,message,status,created_at) VALUES(?,?,?,?,?,?)",(int(r.id),user,int(iq),msg.strip(),"New",datetime.now().isoformat(timespec="minutes")))
-                    st.session_state.pop("inq_listing",None); st.success("Inquiry saved."); st.rerun()
+                    x("INSERT INTO inquiries(listing_id,buyer,quantity,message,status,created_at) VALUES(?,?,?,?,?,?)",
+                      (int(r.id),user,int(iq),msg.strip(),"New",datetime.now().isoformat(timespec="minutes")))
+                    st.session_state.pop("inq_listing",None)
+                    st.success("Inquiry saved.")
+                    st.rerun()
+
+if page=="Artisan Marketplace":
+    render_marketplace("artisan")
+elif page=="Raw Materials Marketplace":
+    render_marketplace("raw")
 
 elif page=="Messages":
     hero("Messages","Basic in-app text messaging between marketplace participants.")
@@ -207,7 +344,9 @@ elif page=="Product Catalogue":
 else:
     hero("About Project","A student prototype inspired by the Nagpur Readymade Garment Cluster case-study context.")
     st.markdown("""
-    **Marketplace:** browse/search material and garment listings; publish offers with seller, location, price and quantity.
+    **Artisan Marketplace:** discover and publish artwork, original designs, embroidery, handcrafted accessories and textile art by artisans. Listings support image uploads.
+
+    **Raw Materials Marketplace:** a separate space for fabrics, threads, trims, packaging and other garment-making supplies.
 
     **Communication:** submit buyer inquiries and use basic in-app text messages stored in SQLite.
 
