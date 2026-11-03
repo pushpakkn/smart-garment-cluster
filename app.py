@@ -125,6 +125,25 @@ h1,h2,h3,h4,h5,h6,p,li,label,[data-testid="stMarkdownContainer"],
 .listing-card{background:#ffffff;border:1px solid #dddfe2;border-radius:10px;padding:1rem;margin:.5rem 0}
 .listing-card h3{color:#1c1e21!important}
 .listing-price{color:#0866ff!important;font-size:1.08rem;font-weight:750}
+
+/* Floating Messenger-style chat launcher and pop-up */
+div[data-testid="stPopover"]{
+  position:fixed!important;right:24px!important;bottom:22px!important;
+  z-index:99999!important;width:auto!important
+}
+div[data-testid="stPopover"] > button{
+  background:#1877f2!important;color:#fff!important;border:0!important;
+  border-radius:999px!important;padding:.72rem 1.15rem!important;
+  min-height:3rem!important;font-weight:750!important;
+  box-shadow:0 5px 18px rgba(24,119,242,.28)!important
+}
+div[data-testid="stPopover"] > button:hover{background:#166fe5!important}
+div[data-testid="stPopoverBody"]{
+  width:min(370px,calc(100vw - 32px))!important;
+  max-height:min(620px,75vh)!important;overflow-y:auto!important;
+  border:1px solid #dddfe2!important;border-radius:14px!important;
+  box-shadow:0 12px 38px rgba(0,0,0,.20)!important;background:#fff!important
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -583,44 +602,35 @@ elif page=="Raw Materials Marketplace":
     render_marketplace("raw")
 
 elif page=="Chat Box":
-    hero("Chat Box","Direct conversations between registered buyers and artisans.")
+    hero("Chat Box","Your conversations, in a compact Messenger-style pop-up.")
     if not signed_in:
         st.info("Sign in to chat. All public marketplace listings remain visible without an account.")
     else:
-        if signed_in["username"] in ("buyer","artisan","artisan2"):
-            st.info("Demo mode: conversations are preloaded with fictional sample messages. Send a message to demonstrate two-way chat; switch between Buyer demo and Artisan demo from the sidebar after signing out.")
         contacts=q("SELECT id,username,full_name,role FROM users WHERE id<>? ORDER BY full_name",(int(signed_in["id"]),))
         if contacts.empty:
             st.info("No other registered users yet. Create a second account to test buyer–artisan conversations.")
         else:
-            contact_ids=contacts.id.astype(int).tolist()
-            default_id=st.session_state.get("chat_partner")
-            if default_id not in contact_ids: default_id=contact_ids[0]
-            selected=st.selectbox("Conversation",contact_ids,index=contact_ids.index(default_id),
-                format_func=lambda uid: (contacts[contacts.id==uid].iloc[0]["full_name"]+
-                    " · "+contacts[contacts.id==uid].iloc[0]["role"]))
-            partner=contacts[contacts.id==selected].iloc[0]
-            st.markdown(f"### {partner.full_name}")
-            st.caption(f"{partner.role} · {st.session_state.get('chat_listing_title','Marketplace conversation')}")
-            history=q("""SELECT sender,recipient,body,sent_at FROM messages
-                WHERE (lower(sender)=lower(?) AND lower(recipient)=lower(?))
-                   OR (lower(sender)=lower(?) AND lower(recipient)=lower(?))
-                ORDER BY id""",(signed_in["username"],partner.username,partner.username,signed_in["username"]))
-            if history.empty: st.caption("No messages yet. Start the conversation below.")
-            for _,m in history.iterrows():
-                own=str(m.sender).lower()==signed_in["username"].lower()
-                with st.chat_message("user" if own else "assistant"):
-                    st.caption(("You" if own else partner.full_name)+" · "+str(m.sent_at))
-                    st.write(m.body)
-            with st.form("chat_compose",clear_on_submit=True):
-                message=st.text_area("Message",placeholder="Ask about customisation, pricing, availability or an order...")
-                send=st.form_submit_button("Send",type="primary")
-            if send:
-                if not message.strip(): st.error("Write a message first.")
-                else:
-                    x("INSERT INTO messages(sender,recipient,subject,body,listing_id,sent_at,read_status) VALUES(?,?,?,?,?,?,0)",
-                      (signed_in["username"],partner.username,"Chat",message.strip(),None,datetime.now().isoformat(timespec="minutes")))
-                    st.rerun()
+            st.markdown("### Your conversations")
+            st.caption("Open the blue **Chats** button at the bottom-right of the app to bring up a floating conversation window. It stays available while you browse other sections.")
+            for _, contact in contacts.iterrows():
+                preview=q("""SELECT body,sent_at,sender FROM messages
+                    WHERE (lower(sender)=lower(?) AND lower(recipient)=lower(?))
+                       OR (lower(sender)=lower(?) AND lower(recipient)=lower(?))
+                    ORDER BY id DESC LIMIT 1""",(signed_in["username"],contact.username,contact.username,signed_in["username"]))
+                left,right=st.columns([4,1])
+                with left:
+                    st.markdown(f"**{contact.full_name}** · {contact.role}")
+                    if not preview.empty:
+                        p=preview.iloc[0]
+                        st.caption(f"{'You: ' if str(p.sender).lower()==signed_in['username'].lower() else ''}{p.body} · {p.sent_at}")
+                    else:
+                        st.caption("No messages yet")
+                with right:
+                    if st.button("Open chat",key=f"open_chat_{int(contact.id)}",type="primary"):
+                        st.session_state["chat_partner"]=int(contact.id)
+                        st.session_state["chat_popup_open"]=True
+                        st.rerun()
+                st.divider()
 
 elif page=="Buyer Inquiries":
     hero("Buyer Inquiries","Review requests and convert accepted inquiries into production orders.")
@@ -829,3 +839,60 @@ else:
 
     **Scope note:** this is not official SFURTI software. Seed data is fictional. Accounts use salted PBKDF2 password hashes. Email verification, password reset, payments, shipping, dispute resolution and guaranteed persistent cloud storage are outside this prototype's scope. Chat is stored in SQLite and does not provide push notifications. Use demo names and never enter sensitive information.
     """)
+
+
+# Persistent floating chat pop-up (available while browsing any signed-in section).
+if signed_in:
+    chat_contacts=q("SELECT id,username,full_name,role FROM users WHERE id<>? ORDER BY full_name",(int(signed_in["id"]),))
+    unread_count=int(q("SELECT COUNT(*) AS n FROM messages WHERE lower(recipient)=lower(?) AND read_status=0",(signed_in["username"],)).iloc[0]["n"])
+    launcher_label=f"💬 Chats  ·  {unread_count}" if unread_count else "💬 Chats"
+    with st.popover(launcher_label,help="Open your conversations",use_container_width=False):
+        st.markdown("### Messenger")
+        st.caption("Private buyer–artisan conversations")
+        if chat_contacts.empty:
+            st.info("No contacts yet. Create another account to start a conversation.")
+        else:
+            contact_ids=chat_contacts.id.astype(int).tolist()
+            preferred=st.session_state.get("chat_partner")
+            if preferred not in contact_ids:
+                preferred=contact_ids[0]
+            selected=st.selectbox(
+                "Chat with",
+                contact_ids,
+                index=contact_ids.index(preferred),
+                key="floating_chat_contact",
+                format_func=lambda uid: (
+                    chat_contacts[chat_contacts.id==uid].iloc[0]["full_name"]
+                    + " · " + chat_contacts[chat_contacts.id==uid].iloc[0]["role"]
+                ),
+            )
+            st.session_state["chat_partner"]=int(selected)
+            partner=chat_contacts[chat_contacts.id==selected].iloc[0]
+            st.markdown(f"**{partner.full_name}**")
+            st.caption(str(partner.role)+" · Active conversation")
+            history=q("""SELECT id,sender,recipient,body,sent_at FROM messages
+                WHERE (lower(sender)=lower(?) AND lower(recipient)=lower(?))
+                   OR (lower(sender)=lower(?) AND lower(recipient)=lower(?))
+                ORDER BY id DESC LIMIT 40""",
+                (signed_in["username"],partner.username,partner.username,signed_in["username"]))
+            history=history.iloc[::-1] if not history.empty else history
+            if history.empty:
+                st.caption("No messages yet. Say hello!")
+            else:
+                for _,m in history.iterrows():
+                    own=str(m.sender).lower()==signed_in["username"].lower()
+                    with st.chat_message("user" if own else "assistant"):
+                        st.write(str(m.body))
+                        st.caption(("You" if own else str(partner.full_name))+" · "+str(m.sent_at))
+                    if not own:
+                        x("UPDATE messages SET read_status=1 WHERE id=?",(int(m.id),))
+            with st.form("floating_chat_compose",clear_on_submit=True):
+                message=st.text_input("Message",placeholder="Write a message…",label_visibility="collapsed")
+                send=st.form_submit_button("Send",type="primary",use_container_width=True)
+            if send:
+                if not message.strip():
+                    st.warning("Write a message first.")
+                else:
+                    x("INSERT INTO messages(sender,recipient,subject,body,listing_id,sent_at,read_status) VALUES(?,?,?,?,?,?,0)",
+                      (signed_in["username"],partner.username,"Chat",message.strip(),None,datetime.now().isoformat(timespec="minutes")))
+                    st.rerun()

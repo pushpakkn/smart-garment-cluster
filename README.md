@@ -30,3 +30,7 @@ Existing database records are retained. The app adds missing demonstration produ
 
 ## Visual theme
 The interface uses a Facebook-inspired palette: Facebook blue (`#1877F2`), light grey canvas (`#F0F2F5`), white content cards, and dark text (`#1C1E21`). The existing page structure, navigation and workflows are retained.
+
+
+## Messenger-style floating chat
+After signing in, a blue **Chats** launcher stays at the bottom-right while you browse the app. Open it to select a buyer or artisan, read the conversation, and send a message without leaving the current page. The Chat Box section also lists contacts and can open a selected conversation. Unread messages are counted on the launcher. Messages are stored in SQLite; this prototype does not provide live push notifications or real-time updates between browser sessions.
