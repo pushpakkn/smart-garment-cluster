@@ -26,3 +26,7 @@
 
 ## Limitations
 Streamlit browser-level visual testing must still be performed after deployment. Chat is stored in SQLite and refreshes on page rerun; it is not a real-time push messaging service. Demo records are fictional. Do not use the demo credentials in a public production deployment.
+
+
+## Hosted database compatibility fix
+Added backward-compatible SQLite migrations for missing user profile columns (email, password_hash, salt, role, full_name, location, craft, bio, created_at). This addresses older deployed databases where CREATE TABLE IF NOT EXISTS does not update an existing table schema.

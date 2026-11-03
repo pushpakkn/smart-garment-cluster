@@ -217,6 +217,23 @@ def init():
         c.execute("""CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT,sender TEXT NOT NULL,recipient TEXT NOT NULL,subject TEXT NOT NULL,body TEXT NOT NULL,listing_id INTEGER,sent_at TEXT NOT NULL,read_status INTEGER NOT NULL DEFAULT 0)""")
         c.execute("""CREATE TABLE IF NOT EXISTS inquiries(id INTEGER PRIMARY KEY AUTOINCREMENT,listing_id INTEGER NOT NULL,buyer TEXT NOT NULL,quantity INTEGER NOT NULL,message TEXT DEFAULT '',status TEXT NOT NULL DEFAULT 'New',created_at TEXT NOT NULL)""")
         c.execute("""CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT,username TEXT UNIQUE NOT NULL,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,salt TEXT NOT NULL,role TEXT NOT NULL,full_name TEXT NOT NULL,location TEXT DEFAULT '',craft TEXT DEFAULT '',bio TEXT DEFAULT '',created_at TEXT NOT NULL)""")
+        # Migrate older hosted databases: CREATE TABLE IF NOT EXISTS does not add
+        # columns to an existing users table. Add newer profile fields safely.
+        user_cols = [r[1] for r in c.execute("PRAGMA table_info(users)").fetchall()]
+        user_migrations = [
+            ("email", "TEXT NOT NULL DEFAULT ''"),
+            ("password_hash", "TEXT NOT NULL DEFAULT ''"),
+            ("salt", "TEXT NOT NULL DEFAULT ''"),
+            ("role", "TEXT NOT NULL DEFAULT 'Buyer'"),
+            ("full_name", "TEXT NOT NULL DEFAULT ''"),
+            ("location", "TEXT DEFAULT ''"),
+            ("craft", "TEXT DEFAULT ''"),
+            ("bio", "TEXT DEFAULT ''"),
+            ("created_at", "TEXT NOT NULL DEFAULT ''"),
+        ]
+        for col, definition in user_migrations:
+            if col not in user_cols:
+                c.execute(f"ALTER TABLE users ADD COLUMN {col} {definition}")
         listing_cols=[r[1] for r in c.execute("PRAGMA table_info(listings)").fetchall()]
         if "owner_user_id" not in listing_cols: c.execute("ALTER TABLE listings ADD COLUMN owner_user_id INTEGER")
         inquiry_cols=[r[1] for r in c.execute("PRAGMA table_info(inquiries)").fetchall()]
