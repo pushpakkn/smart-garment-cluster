@@ -26,3 +26,7 @@ streamlit run app.py
 Replace the files in the GitHub repository connected to Streamlit Community Cloud with the contents of this ZIP, then allow the app to redeploy.
 
 Existing database records are retained. The app adds missing demonstration products and materials without duplicating matching names. This is a student prototype; chat refreshes on Streamlit reruns and SQLite persistence on hosted infrastructure is not guaranteed.
+
+
+## Accessibility and QA
+The latest build includes contrast-focused styling for text, inputs, menus, buttons, tables, metrics, tabs, chat and alerts. See `TEST_REPORT.md` for automated checks and representative WCAG contrast calculations. A deployed-browser visual check is still required.
